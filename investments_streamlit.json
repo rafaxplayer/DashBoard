@@ -1,0 +1,44 @@
+[
+  {
+    "name":"Go\u00acGrow",
+    "link":"https:\/\/app.bondora.com\/es\/gogrow",
+    "amount":6869.63,
+    "roi":6.0
+  },
+  {
+    "name":"Hive5",
+    "link":"https:\/\/hive5.com\/",
+    "amount":4135.0,
+    "roi":12.32
+  },
+  {
+    "name":"My Investor (MSCI)",
+    "link":"https:\/\/newapp.myinvestor.es\/auth\/signin",
+    "amount":5431.33,
+    "roi":22.65
+  },
+  {
+    "name":"TWINO (Flexi)",
+    "link":"https:\/\/www.twino.eu\/es\/auth\/dashboard",
+    "amount":3781.25,
+    "roi":6.0
+  },
+  {
+    "name":"Monefit",
+    "link":"https:\/\/smartsaver.monefit.com\/es\/summary",
+    "amount":3025.42,
+    "roi":7.5
+  },
+  {
+    "name":"Esketik",
+    "link":"https:\/\/esketit.com\/investor",
+    "amount":2010.36,
+    "roi":11.0
+  },
+  {
+    "name":"Renault Bank",
+    "link":"https:\/\/areaprivada.renaultbank.es\/",
+    "amount":2000.55,
+    "roi":2.15
+  }
+]
