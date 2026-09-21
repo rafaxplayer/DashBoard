@@ -1,44 +1,79 @@
-[
-  {
-    "name":"Go\u00acGrow",
-    "link":"https:\/\/app.bondora.com\/es\/gogrow",
-    "amount":6869.63,
-    "roi":6.0
-  },
-  {
-    "name":"Hive5",
-    "link":"https:\/\/hive5.com\/",
-    "amount":4135.0,
-    "roi":12.32
-  },
-  {
-    "name":"My Investor (MSCI)",
-    "link":"https:\/\/newapp.myinvestor.es\/auth\/signin",
-    "amount":5431.33,
-    "roi":22.65
-  },
-  {
-    "name":"TWINO (Flexi)",
-    "link":"https:\/\/www.twino.eu\/es\/auth\/dashboard",
-    "amount":3781.25,
-    "roi":6.0
-  },
-  {
-    "name":"Monefit",
-    "link":"https:\/\/smartsaver.monefit.com\/es\/summary",
-    "amount":3025.42,
-    "roi":7.5
-  },
-  {
-    "name":"Esketik",
-    "link":"https:\/\/esketit.com\/investor",
-    "amount":2010.36,
-    "roi":11.0
-  },
-  {
-    "name":"Renault Bank",
-    "link":"https:\/\/areaprivada.renaultbank.es\/",
-    "amount":2000.55,
-    "roi":2.15
-  }
-]
+{
+  "investments": [
+    {
+      "name": "Go¬Grow",
+      "link": "https://app.bondora.com/es/gogrow",
+      "amount": 6869.63,
+      "roi": 6.0,
+      "note": "Fondo de emergencia"
+    },
+    {
+      "name": "Hive5",
+      "link": "https://hive5.com/",
+      "amount": 4135.0,
+      "roi": 12.32,
+      "note": ""
+    },
+    {
+      "name": "My Investor (MSCI)",
+      "link": "https://newapp.myinvestor.es/auth/signin",
+      "amount": 5431.33,
+      "roi": 22.65,
+      "note": ""
+    },
+    {
+      "name": "TWINO (Flexi)",
+      "link": "https://www.twino.eu/es/auth/dashboard",
+      "amount": 3781.25,
+      "roi": 6.0,
+      "note": ""
+    },
+    {
+      "name": "Monefit",
+      "link": "https://smartsaver.monefit.com/es/summary",
+      "amount": 3025.42,
+      "roi": 7.5,
+      "note": ""
+    },
+    {
+      "name": "Esketik",
+      "link": "https://esketit.com/investor",
+      "amount": 2011.36,
+      "roi": 11.0,
+      "note": "Retirando para inversion en loanch"
+    },
+    {
+      "name": "Renault Bank",
+      "link": "https://areaprivada.renaultbank.es/",
+      "amount": 2000.55,
+      "roi": 2.15,
+      "note": ""
+    }
+  ],
+  "banks": [
+    {
+      "name": "My Investor",
+      "iban": "ES8415447889706650740290",
+      "bic_swift": "BACAESMMXXX",
+      "holder": "JUAN RAFAEL SIMARRO FABA"
+    },
+    {
+      "name": "Renault",
+      "iban": "ES8415080001250015007123",
+      "bic_swift": "",
+      "holder": "JUAN RAFAEL SIMARRO FABA"
+    },
+    {
+      "name": "Santander",
+      "iban": "ES7900495525512714340673",
+      "bic_swift": "BSCH ES MM XXX",
+      "holder": "JUAN RAFAEL SIMARRO FABA"
+    },
+    {
+      "name": "N26",
+      "iban": "ES0415632626353261237985",
+      "bic_swift": "NTSBESN1XXX",
+      "holder": "Juan Rafael Simarro Faba"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import hashlib
+import json
 from pathlib import Path
 from html import escape
 from urllib.parse import urlparse
@@ -74,6 +75,14 @@ st.markdown('''
         padding: 1rem 1.2rem;
     }
 
+    [data-testid="stForm"] {
+        margin-top: 1rem;
+    }
+
+    .add-form-gap {
+        height: 1.5rem;
+    }
+
     label, [data-testid="stWidgetLabel"] p {
         font-size: 1.05rem !important;
     }
@@ -142,6 +151,11 @@ st.markdown('''
         font-size: 1.25rem !important;
     }
 
+    [data-testid="stButton"] button[aria-label="Editar inversión"] {
+        min-width: 42px;
+        padding: 0.5rem;
+    }
+
     input, textarea, [data-baseweb="select"] > div {
         background: var(--panel-deep) !important;
         color: var(--text) !important;
@@ -189,34 +203,90 @@ st.markdown('''
 
     .portfolio-header {
         display: grid;
-        grid-template-columns: 1.7fr 1.3fr 1fr 1fr 0.5fr;
+        grid-template-columns: 1.7fr 1.3fr 1fr 1fr 0.8fr;
         gap: 0.8rem;
         background: var(--purple);
         color: white;
         font-size: 16px;
         font-weight: 700;
         padding: 0.75rem 0.65rem;
+        margin-bottom: 1rem;
+    }
+
+    .portfolio-name {
+        color: var(--text);
+        font-weight: 600;
+        line-height: 1.25;
+    }
+
+    .portfolio-note {
+        color: var(--muted);
+        font-size: 0.9rem;
+        font-weight: 400;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        margin-top: 0.25rem;
     }
 </style>
 ''', unsafe_allow_html=True)
 
 def load_data():
     if DATA_FILE.exists():
-        df = pd.read_json(DATA_FILE)
+        with DATA_FILE.open('r', encoding='utf-8') as data_file:
+            stored_data = json.load(data_file)
+        investments = stored_data.get('investments', []) if isinstance(stored_data, dict) else stored_data
+        df = pd.DataFrame(investments)
         if 'link' not in df.columns:
             df['link'] = ''
-        return df[['name', 'link', 'amount', 'roi']]
+        if 'note' not in df.columns:
+            df['note'] = ''
+        df['note'] = df['note'].fillna('').astype(str)
+        return df[['name', 'link', 'amount', 'roi', 'note']]
     else:
         df = pd.DataFrame([
-            {'name':'BTC','link':'https://bitcoin.org/','amount':12000.0,'roi':18.5},
-            {'name':'ETF Global','link':'','amount':8000.0,'roi':6.2},
-            {'name':'Ahorros','link':'','amount':2000.0,'roi':1.1}
+            {'name':'BTC','link':'https://bitcoin.org/','amount':12000.0,'roi':18.5,'note':''},
+            {'name':'ETF Global','link':'','amount':8000.0,'roi':6.2,'note':''},
+            {'name':'Ahorros','link':'','amount':2000.0,'roi':1.1,'note':''}
         ])
         save_data(df)
         return df
 
 def save_data(df):
-    df.to_json(DATA_FILE, orient='records', indent=2)
+    save_all_data(df, load_banks())
+
+def save_all_data(df, banks):
+    with DATA_FILE.open('w', encoding='utf-8') as data_file:
+        json.dump(
+            {'investments': df.to_dict(orient='records'), 'banks': banks.to_dict(orient='records')},
+            data_file,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+def load_banks():
+    if not DATA_FILE.exists():
+        return pd.DataFrame(columns=['name', 'iban', 'bic_swift', 'holder'])
+    with DATA_FILE.open('r', encoding='utf-8') as data_file:
+        stored_data = json.load(data_file)
+    banks = stored_data.get('banks', []) if isinstance(stored_data, dict) else []
+    df = pd.DataFrame(banks)
+    for field in ('name', 'iban', 'bic_swift', 'holder'):
+        if field not in df.columns:
+            df[field] = ''
+        df[field] = df[field].fillna('').astype(str)
+    return df[['name', 'iban', 'bic_swift', 'holder']]
+
+def bank_widget_id(bank):
+    values = tuple(str(bank.get(field, '')) for field in ('name', 'iban', 'bic_swift', 'holder'))
+    return hashlib.sha1(repr(values).encode('utf-8')).hexdigest()[:12]
+
+def request_bank_delete(row_index, bank):
+    st.session_state.pending_bank_delete = {
+        'row_index': int(row_index),
+        'bank': bank,
+    }
 
 def compute_derived(df):
     df = df.copy()
@@ -243,6 +313,36 @@ def request_delete(row_index, investment):
         'investment': investment,
     }
 
+def request_edit(row_index):
+    st.session_state.pending_edit = int(row_index)
+
+@st.dialog('Editar inversión')
+def edit_investment_dialog(row_index):
+    investment = st.session_state.df.loc[row_index]
+    with st.form(f'edit_form_{row_index}'):
+        name = st.text_input('Nombre / Inversión', value=str(investment['name']))
+        link = st.text_input('Enlace', value=str(investment.get('link', '')), placeholder='https://...')
+        amount = st.number_input('Cantidad invertida (€)', min_value=0.0, value=float(investment['amount']), step=0.01)
+        roi = st.number_input('Rentabilidad (%)', value=float(investment['roi']), step=0.01)
+        note = st.text_area('Nota', value=str(investment.get('note', '')), placeholder='Añade una nota sobre esta inversión...')
+        save_col, cancel_col = st.columns(2)
+        with save_col:
+            save = st.form_submit_button('Guardar', type='primary', use_container_width=True)
+        with cancel_col:
+            cancel = st.form_submit_button('Cancelar', use_container_width=True)
+
+    if cancel:
+        st.session_state.pending_edit = None
+        st.rerun()
+    if save:
+        st.session_state.df.loc[row_index, ['name', 'link', 'amount', 'roi', 'note']] = [
+            name or 'Sin nombre', link.strip(), float(amount), float(roi), note.strip()
+        ]
+        save_data(st.session_state.df)
+        st.session_state.pending_edit = None
+        st.session_state.notification = {'message': 'Inversión actualizada correctamente', 'icon': '✅'}
+        st.rerun()
+
 def investment_widget_id(investment):
     values = tuple(str(investment.get(field, '')) for field in ('name', 'link', 'amount', 'roi'))
     return hashlib.sha1(repr(values).encode('utf-8')).hexdigest()[:12]
@@ -264,7 +364,17 @@ def main():
         st.session_state.df = load_data()
     elif 'link' not in st.session_state.df.columns:
         st.session_state.df['link'] = ''
-    st.session_state.df = st.session_state.df[['name', 'link', 'amount', 'roi']]
+    if 'note' not in st.session_state.df.columns:
+        st.session_state.df['note'] = ''
+    st.session_state.df['note'] = st.session_state.df['note'].fillna('').astype(str)
+    st.session_state.df = st.session_state.df[['name', 'link', 'amount', 'roi', 'note']]
+    if 'banks' not in st.session_state:
+        st.session_state.banks = load_banks()
+    st.session_state.banks = st.session_state.banks[['name', 'iban', 'bic_swift', 'holder']]
+
+    pending_edit = st.session_state.get('pending_edit')
+    if pending_edit is not None and pending_edit in st.session_state.df.index:
+        edit_investment_dialog(pending_edit)
 
     with st.container():
         csv = st.session_state.df.to_csv(index=False)
@@ -314,11 +424,13 @@ def main():
 
         with row1_col1:
             st.header('Añadir inversión')
+            st.markdown('<div class="add-form-gap"></div>', unsafe_allow_html=True)
             with st.form('add_form'):
                 name = st.text_input('Nombre / Inversión', value='')
                 link = st.text_input('Enlace', value='', placeholder='https://...')
                 amount = st.number_input('Cantidad invertida (€)', min_value=0.0, value=0.0, step=0.01)
                 roi = st.number_input('Rentabilidad (%)', value=0.0, step=0.01)
+                note = st.text_area('Nota', value='', placeholder='Añade una nota sobre esta inversión...')
                 add = st.form_submit_button('Añadir inversión')
                 if add:
                     new = pd.DataFrame([{
@@ -326,6 +438,7 @@ def main():
                         'link': link.strip(),
                         'amount': float(amount),
                         'roi': float(roi),
+                        'note': note.strip(),
                     }])
                     st.session_state.df = pd.concat([st.session_state.df, new], ignore_index=True)
                     save_data(st.session_state.df)
@@ -346,64 +459,45 @@ def main():
             portfolio_rows = []
             for row_index, investment in st.session_state.df.iterrows():
                 widget_id = investment_widget_id(investment)
-                name_col, link_col, amount_col, roi_col, delete_col = st.columns([1.7, 1.3, 1, 1, 0.5])
+                name_col, link_col, amount_col, roi_col, actions_col = st.columns([1.7, 1.3, 1, 1, 0.8])
                 with name_col:
-                    edited_name = st.text_input(
-                        'Nombre',
-                        value=str(investment['name']),
-                        key=f'portfolio_name_{widget_id}',
-                        label_visibility='collapsed',
+                    note = escape(str(investment.get('note', '')).strip())
+                    note_html = f'<div class="portfolio-note">{note}</div>' if note else ''
+                    st.markdown(
+                        f'<div class="portfolio-name">{escape(str(investment["name"]))}{note_html}</div>',
+                        unsafe_allow_html=True,
                     )
                 with link_col:
-                    edited_link = st.text_input(
-                        'Enlace',
-                        value=str(investment.get('link', '')),
-                        key=f'portfolio_link_{widget_id}',
-                        placeholder='https://...',
-                        label_visibility='collapsed',
-                    )
+                    link = safe_link(investment.get('link', ''))
+                    st.markdown(f'[Abrir enlace]({link})' if link else 'Sin enlace')
                 with amount_col:
-                    edited_amount = st.number_input(
-                        'Invertido',
-                        min_value=0.0,
-                        value=float(investment['amount']),
-                        step=0.01,
-                        key=f'portfolio_amount_{widget_id}',
-                        label_visibility='collapsed',
-                    )
+                    st.write(format_euros(float(investment['amount'])))
                 with roi_col:
-                    edited_roi = st.number_input(
-                        'Rentabilidad',
-                        value=float(investment['roi']),
-                        step=0.01,
-                        key=f'portfolio_roi_{widget_id}',
-                        label_visibility='collapsed',
-                    )
-                with delete_col:
-                    st.button(
-                        '',
-                        icon=':material/delete:',
-                        help='Eliminar inversión',
-                        type='secondary',
-                        key=f'portfolio_delete_{widget_id}',
-                        on_click=request_delete,
-                        args=(row_index, investment.to_dict()),
-                    )
-                portfolio_rows.append({
-                    'name': edited_name,
-                    'link': edited_link,
-                    'amount': edited_amount,
-                    'roi': edited_roi,
-                })
-
-            if st.button('Guardar edición del portfolio', use_container_width=True):
-                st.session_state.df = pd.DataFrame(portfolio_rows, columns=['name', 'link', 'amount', 'roi'])
-                save_data(st.session_state.df)
-                st.session_state.notification = {
-                    'message': 'Cambios del portfolio guardados',
-                    'icon': '✅',
-                }
-                st.rerun()
+                    st.write(f'{float(investment["roi"]):.2f}%')
+                with actions_col:
+                    edit_col, delete_col = st.columns(2)
+                    with edit_col:
+                        st.button(
+                            '',
+                            icon=':material/edit:',
+                            help='Editar inversión',
+                            type='secondary',
+                            key=f'portfolio_edit_{widget_id}',
+                            on_click=request_edit,
+                            args=(row_index,),
+                            use_container_width=True,
+                        )
+                    with delete_col:
+                        st.button(
+                            '',
+                            icon=':material/delete:',
+                            help='Eliminar inversión',
+                            type='secondary',
+                            key=f'portfolio_delete_{widget_id}',
+                            on_click=request_delete,
+                            args=(row_index, investment.to_dict()),
+                            use_container_width=True,
+                        )
 
             df = compute_derived(st.session_state.df)
             st.metric('Total invertido', format_euros(df['amount'].sum()))
@@ -463,6 +557,107 @@ def main():
                 display_df.to_html(index=False, classes='benefits-table', escape=False),
                 unsafe_allow_html=True,
             )
+
+    st.divider()
+    with st.container(border=True):
+        st.header('Bancos')
+        form_col, table_col = st.columns([1, 2])
+
+        with form_col:
+            st.subheader('Añadir banco')
+            with st.form('bank_add_form'):
+                bank_name = st.text_input('Nombre del Banco')
+                iban = st.text_input('IBAN')
+                bic_swift = st.text_input('BIC/SWIFT')
+                holder = st.text_input('Titular')
+                add_bank = st.form_submit_button('Añadir banco')
+                if add_bank:
+                    new_bank = pd.DataFrame([{
+                        'name': bank_name.strip() or 'Sin nombre',
+                        'iban': iban.strip(),
+                        'bic_swift': bic_swift.strip(),
+                        'holder': holder.strip(),
+                    }])
+                    st.session_state.banks = pd.concat(
+                        [st.session_state.banks, new_bank], ignore_index=True
+                    )
+                    save_all_data(st.session_state.df, st.session_state.banks)
+                    st.session_state.notification = {
+                        'message': 'Banco añadido correctamente',
+                        'icon': '✅',
+                    }
+                    st.rerun()
+
+        with table_col:
+            pending_bank_delete = st.session_state.get('pending_bank_delete')
+            pending_bank_index = None
+            pending_bank_name = None
+            if isinstance(pending_bank_delete, dict):
+                pending_bank = pending_bank_delete['bank']
+                candidate_indices = st.session_state.banks.index
+                for field, value in pending_bank.items():
+                    candidate_indices = candidate_indices[
+                        st.session_state.banks.loc[candidate_indices, field].eq(value)
+                    ]
+                if len(candidate_indices):
+                    original_index = pending_bank_delete['row_index']
+                    pending_bank_index = (
+                        original_index
+                        if original_index in candidate_indices
+                        else candidate_indices[0]
+                    )
+                    pending_bank_name = st.session_state.banks.loc[pending_bank_index, 'name']
+
+            if pending_bank_index is not None:
+                st.warning(f'¿Seguro que quieres eliminar el banco «{pending_bank_name}»?')
+                confirm_col, cancel_col = st.columns(2)
+                with confirm_col:
+                    if st.button('Confirmar eliminación', type='primary', key='confirm_bank_delete'):
+                        st.session_state.banks = st.session_state.banks.drop(
+                            index=pending_bank_index
+                        ).reset_index(drop=True)
+                        save_all_data(st.session_state.df, st.session_state.banks)
+                        st.session_state.pending_bank_delete = None
+                        st.session_state.notification = {
+                            'message': f'Banco «{pending_bank_name}» eliminado',
+                            'icon': '🗑️',
+                        }
+                        st.rerun()
+                with cancel_col:
+                    if st.button('Cancelar', key='cancel_bank_delete'):
+                        st.session_state.pending_bank_delete = None
+                        st.rerun()
+
+            st.markdown(
+                '<div class="portfolio-header"><span>Nombre del Banco</span>'
+                '<span>IBAN</span><span>BIC/SWIFT</span><span>Titular</span>'
+                '<span></span></div>',
+                unsafe_allow_html=True,
+            )
+            for row_index, bank in st.session_state.banks.iterrows():
+                widget_id = bank_widget_id(bank)
+                name_col, iban_col, bic_col, holder_col, actions_col = st.columns(
+                    [1.2, 1.7, 1.1, 1.2, 0.45]
+                )
+                with name_col:
+                    st.write(bank['name'])
+                with iban_col:
+                    st.write(bank['iban'] or 'Sin IBAN')
+                with bic_col:
+                    st.write(bank['bic_swift'] or 'Sin BIC/SWIFT')
+                with holder_col:
+                    st.write(bank['holder'] or 'Sin titular')
+                with actions_col:
+                    st.button(
+                        '',
+                        icon=':material/delete:',
+                        help='Eliminar banco',
+                        type='secondary',
+                        key=f'bank_delete_{widget_id}',
+                        on_click=request_bank_delete,
+                        args=(row_index, bank.to_dict()),
+                        use_container_width=True,
+                    )
 
     st.caption('Los datos se guardan localmente en `investments_streamlit.json`')
 
