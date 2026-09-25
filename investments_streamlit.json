@@ -5,49 +5,84 @@
       "link": "https://app.bondora.com/es/gogrow",
       "amount": 6869.63,
       "roi": 6.0,
-      "note": "Fondo de emergencia"
+      "note": "Fondo de emergencia",
+      "beneficiary": "Go And Grow OÜ",
+      "bank_name": "AS LHV Pank",
+      "account_number": "EE777700771004427507",
+      "bic_swift": "LHVBEE22",
+      "payment_reference": "15366001 GG1268674"
     },
     {
       "name": "Hive5",
       "link": "https://hive5.com/",
       "amount": 4135.0,
       "roi": 12.32,
-      "note": ""
+      "note": "",
+      "beneficiary": "Hive5 marketplace d.o.o.",
+      "bank_name": "VERIFIED PAYMENTS UAB",
+      "account_number": "LT323750020003742845",
+      "bic_swift": "VEPALT2XXXX",
+      "payment_reference": "Addition for investor ID 310334"
     },
     {
       "name": "My Investor (MSCI)",
       "link": "https://newapp.myinvestor.es/auth/signin",
       "amount": 5431.33,
       "roi": 22.65,
-      "note": ""
+      "note": "",
+      "beneficiary": "",
+      "bank_name": "",
+      "account_number": "",
+      "bic_swift": "",
+      "payment_reference": ""
     },
     {
       "name": "TWINO (Flexi)",
       "link": "https://www.twino.eu/es/auth/dashboard",
       "amount": 3781.25,
       "roi": 6.0,
-      "note": ""
+      "note": "",
+      "beneficiary": "AS TWINO Investments",
+      "bank_name": "Citadele",
+      "account_number": "LV27PARX0027107683333",
+      "bic_swift": "PARXLV22",
+      "payment_reference": "Inversor Nº 171823 FLEXI"
     },
     {
       "name": "Monefit",
       "link": "https://smartsaver.monefit.com/es/summary",
       "amount": 3025.42,
       "roi": 7.5,
-      "note": ""
-    },
-    {
-      "name": "Esketik",
-      "link": "https://esketit.com/investor",
-      "amount": 2011.36,
-      "roi": 11.0,
-      "note": "Retirando para inversion en loanch"
+      "note": "",
+      "beneficiary": "MONEFIT INVESTMENTS OÜ",
+      "bank_name": "WISE EUROPE S.A",
+      "account_number": "BE07967577916666",
+      "bic_swift": "TRWIBEB1XXX",
+      "payment_reference": "500114872400"
     },
     {
       "name": "Renault Bank",
       "link": "https://areaprivada.renaultbank.es/",
       "amount": 2000.55,
       "roi": 2.15,
-      "note": ""
+      "note": "",
+      "beneficiary": "",
+      "bank_name": "",
+      "account_number": "",
+      "bic_swift": "",
+      "payment_reference": ""
+    },
+    {
+      "name": "Indemo",
+      "link": "https://app.indemo.eu/",
+      "amount": 2025.41,
+      "roi": 15.0,
+      "note": "",
+      "beneficiary": "INDEMO SIA",
+      "bank_name": "AS LHV Pank",
+      "account_number": "EE267700771009403652",
+      "bic_swift": "LHVBEE22",
+      "payment_reference": "ID:3572696 Juan Rafael Simarro Faba"
     }
   ],
   "banks": [
@@ -74,6 +109,32 @@
       "iban": "ES0415632626353261237985",
       "bic_swift": "NTSBESN1XXX",
       "holder": "Juan Rafael Simarro Faba"
+    }
+  ],
+  "reserved_investments": [
+    {
+      "name": "Loanch",
+      "link": "https://loanch.com/es",
+      "amount": 0.0,
+      "roi": 14.5,
+      "note": "",
+      "beneficiary": "",
+      "bank_name": "",
+      "account_number": "",
+      "bic_swift": "",
+      "payment_reference": ""
+    },
+    {
+      "name": "Esketik",
+      "link": "https://esketit.com/investor",
+      "amount": 0.0,
+      "roi": 11.0,
+      "note": "Retirando para inversion en loanch",
+      "beneficiary": "Esketit Platform d.o.o.",
+      "bank_name": "Verified Payments UAB",
+      "account_number": "LT783750020003743569",
+      "bic_swift": "VEPALT2X",
+      "payment_reference": "INV-883742 JUAN RAFAEL SIMARRO FABA - Top-up user account"
     }
   ]
 }

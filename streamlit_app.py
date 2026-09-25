@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 DATA_FILE = Path('investments_streamlit.json')
 
-st.set_page_config(page_title='Dashboard de Inversiones', layout='wide')
+st.set_page_config(page_title='Mis Inversiones', layout='wide')
 
 st.markdown('''
 <style>
@@ -219,6 +219,43 @@ st.markdown('''
         line-height: 1.25;
     }
 
+    .transfer-info {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.05rem;
+        height: 1.05rem;
+        margin-left: 0.35rem;
+        color: #b8b0ff;
+        font-size: 0.85rem;
+        cursor: help;
+        vertical-align: text-top;
+    }
+
+    .transfer-info-tooltip {
+        position: absolute;
+        z-index: 10;
+        left: 1.25rem;
+        top: -0.35rem;
+        display: none;
+        width: 260px;
+        padding: 0.75rem 0.85rem;
+        background: #171a25;
+        border: 1px solid #5b6380;
+        border-radius: 3px;
+        color: var(--text);
+        font-size: 0.85rem;
+        font-weight: 400;
+        line-height: 1.45;
+        white-space: pre-line;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    }
+
+    .transfer-info:hover .transfer-info-tooltip {
+        display: block;
+    }
+
     .portfolio-note {
         color: var(--muted);
         font-size: 0.9rem;
@@ -233,6 +270,7 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 def load_data():
+    transfer_fields = ('beneficiary', 'bank_name', 'account_number', 'bic_swift', 'payment_reference')
     if DATA_FILE.exists():
         with DATA_FILE.open('r', encoding='utf-8') as data_file:
             stored_data = json.load(data_file)
@@ -243,23 +281,55 @@ def load_data():
         if 'note' not in df.columns:
             df['note'] = ''
         df['note'] = df['note'].fillna('').astype(str)
-        return df[['name', 'link', 'amount', 'roi', 'note']]
+        for field in transfer_fields:
+            if field not in df.columns:
+                df[field] = ''
+            df[field] = df[field].fillna('').astype(str)
+        return df[['name', 'link', 'amount', 'roi', 'note', *transfer_fields]]
     else:
         df = pd.DataFrame([
-            {'name':'BTC','link':'https://bitcoin.org/','amount':12000.0,'roi':18.5,'note':''},
-            {'name':'ETF Global','link':'','amount':8000.0,'roi':6.2,'note':''},
-            {'name':'Ahorros','link':'','amount':2000.0,'roi':1.1,'note':''}
+            {'name':'BTC','link':'https://bitcoin.org/','amount':12000.0,'roi':18.5,'note':'', **dict.fromkeys(transfer_fields, '')},
+            {'name':'ETF Global','link':'','amount':8000.0,'roi':6.2,'note':'', **dict.fromkeys(transfer_fields, '')},
+            {'name':'Ahorros','link':'','amount':2000.0,'roi':1.1,'note':'', **dict.fromkeys(transfer_fields, '')}
         ])
         save_data(df)
         return df
 
+def load_reserved_investments():
+    if not DATA_FILE.exists():
+        return []
+    with DATA_FILE.open('r', encoding='utf-8') as data_file:
+        stored_data = json.load(data_file)
+    reserved = stored_data.get('reserved_investments', []) if isinstance(stored_data, dict) else []
+    fields = ('name', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
+              'account_number', 'bic_swift', 'payment_reference')
+    normalized = []
+    for investment in reserved:
+        item = {field: investment.get(field, '') for field in fields}
+        item['name'] = str(item['name']) or 'Sin nombre'
+        item['link'] = str(item['link'])
+        amount = pd.to_numeric(item['amount'], errors='coerce')
+        roi = pd.to_numeric(item['roi'], errors='coerce')
+        item['amount'] = float(0.0 if pd.isna(amount) else amount)
+        item['roi'] = float(0.0 if pd.isna(roi) else roi)
+        for field in fields[4:]:
+            item[field] = str(item[field] or '')
+        normalized.append(item)
+    return normalized
+
 def save_data(df):
     save_all_data(df, load_banks())
 
-def save_all_data(df, banks):
+def save_all_data(df, banks, reserved=None):
+    if reserved is None:
+        reserved = load_reserved_investments()
     with DATA_FILE.open('w', encoding='utf-8') as data_file:
         json.dump(
-            {'investments': df.to_dict(orient='records'), 'banks': banks.to_dict(orient='records')},
+            {
+                'investments': df.to_dict(orient='records'),
+                'banks': banks.to_dict(orient='records'),
+                'reserved_investments': reserved,
+            },
             data_file,
             ensure_ascii=False,
             indent=2,
@@ -307,10 +377,114 @@ def safe_link(value):
         return link
     return ''
 
+def transfer_info_html(investment):
+    fields = (
+        ('Beneficiario', 'beneficiary'),
+        ('Nombre de banco', 'bank_name'),
+        ('Número de cuenta', 'account_number'),
+        ('BIC/SWIFT', 'bic_swift'),
+        ('Referencia de pago', 'payment_reference'),
+    )
+    values = [(label, str(investment.get(key, '')).strip()) for label, key in fields]
+    if not any(value for _, value in values):
+        return ''
+    tooltip = '<br>'.join(
+        f'<strong>{escape(label)}:</strong> {escape(value) if value else "-"}'
+        for label, value in values
+    )
+    return (
+        '<span class="transfer-info" aria-label="Datos de transferencia">ⓘ'
+        f'<span class="transfer-info-tooltip">{tooltip}</span></span>'
+    )
+
 def request_delete(row_index, investment):
     st.session_state.pending_delete = {
         'row_index': int(row_index),
         'investment': investment,
+    }
+
+def request_reserved_dialog():
+    st.session_state.show_reserved_dialog = True
+
+def investment_name_key(value):
+    return ' '.join(str(value).strip().casefold().split())
+
+@st.dialog('Inversiones en reserva')
+def reserved_investments_dialog():
+    reserved = st.session_state.reserved_investments
+    if not reserved:
+        st.info('No hay inversiones guardadas en reserva.')
+        return
+    st.write('Selecciona una inversión para cargar sus datos en el formulario de alta.')
+    for reserve_index, investment in enumerate(reserved):
+        item_col, action_col = st.columns([4, 1])
+        with item_col:
+            st.write(investment['name'])
+            st.caption(f'{format_euros(investment["amount"])} · {investment["roi"]:.2f}%')
+        with action_col:
+            if st.button(
+                '',
+                icon=':material/add_circle:',
+                help=f'Usar {investment["name"]}',
+                key=f'use_reserved_{reserve_index}',
+                use_container_width=True,
+            ):
+                st.session_state.selected_reserved_index = reserve_index
+                st.session_state.load_reserved_form = True
+                st.session_state.show_reserved_dialog = False
+                st.rerun()
+
+def add_investment_from_form():
+    name = st.session_state.get('new_name', '').strip() or 'Sin nombre'
+    name_key = investment_name_key(name)
+    existing_names = {
+        investment_name_key(value)
+        for value in st.session_state.df['name']
+    }
+    selected = st.session_state.get('selected_reserved_index')
+    reserved_names = {
+        investment_name_key(investment['name'])
+        for reserve_index, investment in enumerate(st.session_state.reserved_investments)
+        if reserve_index != selected
+    }
+    if name_key in existing_names or name_key in reserved_names:
+        st.session_state.investment_form_error = (
+            f'Ya existe una inversión con el nombre «{name}» en el portfolio o en reserva.'
+        )
+        return
+
+    new = pd.DataFrame([{
+        'name': name,
+        'link': st.session_state.get('new_link', '').strip(),
+        'amount': float(st.session_state.get('new_amount', 0.0)),
+        'roi': float(st.session_state.get('new_roi', 0.0)),
+        'note': st.session_state.get('new_note', '').strip(),
+        'beneficiary': st.session_state.get('new_beneficiary', '').strip(),
+        'bank_name': st.session_state.get('new_bank_name', '').strip(),
+        'account_number': st.session_state.get('new_account_number', '').strip(),
+        'bic_swift': st.session_state.get('new_bic_swift', '').strip(),
+        'payment_reference': st.session_state.get('new_payment_reference', '').strip(),
+    }])
+    st.session_state.df = pd.concat([st.session_state.df, new], ignore_index=True)
+    if selected is not None and selected < len(st.session_state.reserved_investments):
+        st.session_state.reserved_investments.pop(selected)
+    st.session_state.selected_reserved_index = None
+    st.session_state.load_reserved_form = False
+    for field in (
+        'new_name', 'new_link', 'new_note', 'new_beneficiary', 'new_bank_name',
+        'new_account_number', 'new_bic_swift', 'new_payment_reference',
+    ):
+        st.session_state[field] = ''
+    st.session_state.new_amount = 0.0
+    st.session_state.new_roi = 0.0
+    save_all_data(
+        st.session_state.df,
+        st.session_state.banks,
+        st.session_state.reserved_investments,
+    )
+    st.session_state.notification = {
+        'message': 'Inversión añadida correctamente',
+        'icon': '✅',
     }
 
 def request_edit(row_index):
@@ -325,6 +499,12 @@ def edit_investment_dialog(row_index):
         amount = st.number_input('Cantidad invertida (€)', min_value=0.0, value=float(investment['amount']), step=0.01)
         roi = st.number_input('Rentabilidad (%)', value=float(investment['roi']), step=0.01)
         note = st.text_area('Nota', value=str(investment.get('note', '')), placeholder='Añade una nota sobre esta inversión...')
+        with st.expander('Datos de transferencia', expanded=False):
+            beneficiary = st.text_input('Beneficiario', value=str(investment.get('beneficiary', '')))
+            bank_name = st.text_input('Nombre de banco', value=str(investment.get('bank_name', '')))
+            account_number = st.text_input('Número de cuenta', value=str(investment.get('account_number', '')))
+            bic_swift = st.text_input('BIC/SWIFT', value=str(investment.get('bic_swift', '')))
+            payment_reference = st.text_input('Referencia de pago', value=str(investment.get('payment_reference', '')))
         save_col, cancel_col = st.columns(2)
         with save_col:
             save = st.form_submit_button('Guardar', type='primary', use_container_width=True)
@@ -335,8 +515,13 @@ def edit_investment_dialog(row_index):
         st.session_state.pending_edit = None
         st.rerun()
     if save:
-        st.session_state.df.loc[row_index, ['name', 'link', 'amount', 'roi', 'note']] = [
-            name or 'Sin nombre', link.strip(), float(amount), float(roi), note.strip()
+        st.session_state.df.loc[row_index, [
+            'name', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
+            'account_number', 'bic_swift', 'payment_reference',
+        ]] = [
+            name or 'Sin nombre', link.strip(), float(amount), float(roi), note.strip(),
+            beneficiary.strip(), bank_name.strip(), account_number.strip(),
+            bic_swift.strip(), payment_reference.strip(),
         ]
         save_data(st.session_state.df)
         st.session_state.pending_edit = None
@@ -358,6 +543,9 @@ def main():
     notification = st.session_state.pop('notification', None)
     if notification:
         st.toast(notification['message'], icon=notification['icon'])
+    form_error = st.session_state.pop('investment_form_error', None)
+    if form_error:
+        st.error(form_error)
 
     # Load or initialize
     if 'df' not in st.session_state:
@@ -367,14 +555,24 @@ def main():
     if 'note' not in st.session_state.df.columns:
         st.session_state.df['note'] = ''
     st.session_state.df['note'] = st.session_state.df['note'].fillna('').astype(str)
-    st.session_state.df = st.session_state.df[['name', 'link', 'amount', 'roi', 'note']]
+    transfer_fields = ('beneficiary', 'bank_name', 'account_number', 'bic_swift', 'payment_reference')
+    for field in transfer_fields:
+        if field not in st.session_state.df.columns:
+            st.session_state.df[field] = ''
+        st.session_state.df[field] = st.session_state.df[field].fillna('').astype(str)
+    st.session_state.df = st.session_state.df[['name', 'link', 'amount', 'roi', 'note', *transfer_fields]]
     if 'banks' not in st.session_state:
         st.session_state.banks = load_banks()
     st.session_state.banks = st.session_state.banks[['name', 'iban', 'bic_swift', 'holder']]
+    if 'reserved_investments' not in st.session_state:
+        st.session_state.reserved_investments = load_reserved_investments()
 
     pending_edit = st.session_state.get('pending_edit')
     if pending_edit is not None and pending_edit in st.session_state.df.index:
         edit_investment_dialog(pending_edit)
+    if st.session_state.get('show_reserved_dialog'):
+        st.session_state.show_reserved_dialog = False
+        reserved_investments_dialog()
 
     with st.container():
         csv = st.session_state.df.to_csv(index=False)
@@ -403,11 +601,23 @@ def main():
 
     if pending_index is not None:
         st.warning(f'¿Seguro que quieres eliminar la inversión «{pending_name}»?')
+        save_for_later = st.checkbox(
+            'Guardar datos para futuras inversiones',
+            key=f'save_deleted_{pending_index}',
+        )
         confirm_col, cancel_col, _ = st.columns([1, 1, 3])
         with confirm_col:
             if st.button('Confirmar eliminación', type='primary', key='confirm_delete'):
+                if save_for_later:
+                    st.session_state.reserved_investments.append(
+                        st.session_state.df.loc[pending_index].to_dict()
+                    )
                 st.session_state.df = st.session_state.df.drop(index=pending_index).reset_index(drop=True)
-                save_data(st.session_state.df)
+                save_all_data(
+                    st.session_state.df,
+                    st.session_state.banks,
+                    st.session_state.reserved_investments,
+                )
                 st.session_state.pending_delete = None
                 st.session_state.notification = {
                     'message': f'Inversión «{pending_name}» eliminada',
@@ -423,30 +633,60 @@ def main():
         row1_col1, row1_col2 = st.columns([1, 2])
 
         with row1_col1:
-            st.header('Añadir inversión')
+            title_col, reserve_col = st.columns([5, 1])
+            with title_col:
+                st.header('Añadir inversión')
+            if st.session_state.reserved_investments:
+                with reserve_col:
+                    st.button(
+                        '',
+                        icon=':material/inventory_2:',
+                        help='Abrir inversiones en reserva',
+                        type='secondary',
+                        key='open_reserved_investments',
+                        on_click=request_reserved_dialog,
+                        use_container_width=True,
+                    )
             st.markdown('<div class="add-form-gap"></div>', unsafe_allow_html=True)
             with st.form('add_form'):
-                name = st.text_input('Nombre / Inversión', value='')
-                link = st.text_input('Enlace', value='', placeholder='https://...')
-                amount = st.number_input('Cantidad invertida (€)', min_value=0.0, value=0.0, step=0.01)
-                roi = st.number_input('Rentabilidad (%)', value=0.0, step=0.01)
-                note = st.text_area('Nota', value='', placeholder='Añade una nota sobre esta inversión...')
-                add = st.form_submit_button('Añadir inversión')
-                if add:
-                    new = pd.DataFrame([{
-                        'name': name or 'Sin nombre',
-                        'link': link.strip(),
-                        'amount': float(amount),
-                        'roi': float(roi),
-                        'note': note.strip(),
-                    }])
-                    st.session_state.df = pd.concat([st.session_state.df, new], ignore_index=True)
-                    save_data(st.session_state.df)
-                    st.session_state.notification = {
-                        'message': 'Inversión añadida correctamente',
-                        'icon': '✅',
-                    }
-                    st.rerun()
+                selected = st.session_state.get('selected_reserved_index')
+                selected_investment = (
+                    st.session_state.reserved_investments[selected]
+                    if selected is not None and selected < len(st.session_state.reserved_investments)
+                    else {}
+                )
+                new_values = {
+                    'new_name': selected_investment.get('name', ''),
+                    'new_link': selected_investment.get('link', ''),
+                    'new_amount': float(selected_investment.get('amount', 0.0)),
+                    'new_roi': float(selected_investment.get('roi', 0.0)),
+                    'new_note': selected_investment.get('note', ''),
+                    'new_beneficiary': selected_investment.get('beneficiary', ''),
+                    'new_bank_name': selected_investment.get('bank_name', ''),
+                    'new_account_number': selected_investment.get('account_number', ''),
+                    'new_bic_swift': selected_investment.get('bic_swift', ''),
+                    'new_payment_reference': selected_investment.get('payment_reference', ''),
+                }
+                if st.session_state.pop('load_reserved_form', False):
+                    for field, value in new_values.items():
+                        st.session_state[field] = value
+                for field, value in new_values.items():
+                    st.session_state.setdefault(field, value)
+                name = st.text_input('Nombre / Inversión', key='new_name')
+                link = st.text_input('Enlace', placeholder='https://...', key='new_link')
+                amount = st.number_input('Cantidad invertida (€)', min_value=0.0, step=0.01, key='new_amount')
+                roi = st.number_input('Rentabilidad (%)', step=0.01, key='new_roi')
+                note = st.text_area('Nota', placeholder='Añade una nota sobre esta inversión...', key='new_note')
+                with st.expander('Datos de transferencia', expanded=False):
+                    beneficiary = st.text_input('Beneficiario', key='new_beneficiary')
+                    bank_name = st.text_input('Nombre de banco', key='new_bank_name')
+                    account_number = st.text_input('Número de cuenta', key='new_account_number')
+                    bic_swift = st.text_input('BIC/SWIFT', key='new_bic_swift')
+                    payment_reference = st.text_input('Referencia de pago', key='new_payment_reference')
+                st.form_submit_button(
+                    'Añadir inversión',
+                    on_click=add_investment_from_form,
+                )
 
         with row1_col2:
             st.header('Portfolio')
@@ -464,7 +704,8 @@ def main():
                     note = escape(str(investment.get('note', '')).strip())
                     note_html = f'<div class="portfolio-note">{note}</div>' if note else ''
                     st.markdown(
-                        f'<div class="portfolio-name">{escape(str(investment["name"]))}{note_html}</div>',
+                        f'<div class="portfolio-name">{escape(str(investment["name"]))}'
+                        f'{transfer_info_html(investment)}{note_html}</div>',
                         unsafe_allow_html=True,
                     )
                 with link_col:
