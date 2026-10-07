@@ -3,13 +3,15 @@ import pandas as pd
 import plotly.express as px
 import hashlib
 import json
+import shutil
 from pathlib import Path
 from html import escape
 from urllib.parse import urlparse
 
 DATA_FILE = Path('investments_streamlit.json')
+BACKUP_FILE = DATA_FILE.with_suffix(DATA_FILE.suffix + '.bak')
 
-st.set_page_config(page_title='Mis Inversiones', layout='wide')
+st.set_page_config(page_title='Mis inversiones', layout='wide')
 
 st.markdown('''
 <style>
@@ -179,26 +181,61 @@ st.markdown('''
         border-collapse: collapse;
         background: var(--panel-deep);
         color: var(--text);
-        font-size: 18px;
+        font-size: 14px;
+    }
+
+    .benefits-table-scroll {
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .benefits-table th {
         background: var(--purple);
         color: white;
-        font-size: 16px;
+        font-size: 13px;
         font-weight: 700;
-        padding: 0.8rem 0.65rem;
+        padding: 0.65rem 0.5rem;
         text-align: left;
     }
 
     .benefits-table td {
         border-bottom: 1px solid #454b61;
-        padding: 0.85rem 0.65rem;
+        padding: 0.65rem 0.5rem;
         white-space: nowrap;
     }
 
     .benefits-table tr:hover td {
         background: #3b4156;
+    }
+
+    @media (max-width: 768px) {
+        .block-container {
+            padding: 1rem 1rem 1.5rem !important;
+        }
+
+        .st-key-benefits_allocation_layout .stHorizontalBlock {
+            flex-direction: column;
+        }
+
+        .st-key-benefits_allocation_layout .stColumn {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+        }
+
+        .benefits-table {
+            min-width: 500px;
+            font-size: 12px;
+        }
+
+        .benefits-table th {
+            font-size: 11px;
+            padding: 0.55rem 0.4rem;
+        }
+
+        .benefits-table td {
+            padding: 0.55rem 0.4rem;
+        }
     }
 
     .portfolio-header {
@@ -323,17 +360,51 @@ def save_data(df):
 def save_all_data(df, banks, reserved=None):
     if reserved is None:
         reserved = load_reserved_investments()
-    with DATA_FILE.open('w', encoding='utf-8') as data_file:
+    write_data_file(
+        {
+            'investments': df.to_dict(orient='records'),
+            'banks': banks.to_dict(orient='records'),
+            'reserved_investments': reserved,
+        }
+    )
+
+def write_data_file(data):
+    if DATA_FILE.exists():
+        shutil.copy2(DATA_FILE, BACKUP_FILE)
+    temporary_file = DATA_FILE.with_suffix(DATA_FILE.suffix + '.tmp')
+    with temporary_file.open('w', encoding='utf-8') as data_file:
         json.dump(
-            {
-                'investments': df.to_dict(orient='records'),
-                'banks': banks.to_dict(orient='records'),
-                'reserved_investments': reserved,
-            },
+            data,
             data_file,
             ensure_ascii=False,
             indent=2,
         )
+    temporary_file.replace(DATA_FILE)
+
+def validate_import_data(data):
+    if isinstance(data, list):
+        data = {'investments': data}
+    if not isinstance(data, dict):
+        raise ValueError('El JSON debe contener un objeto de datos.')
+
+    investments = data.get('investments')
+    banks = data.get('banks', [])
+    reserved = data.get('reserved_investments', [])
+    if not isinstance(investments, list) or not investments:
+        raise ValueError('El archivo debe incluir al menos una inversión.')
+    if not all(isinstance(item, dict) for item in investments):
+        raise ValueError('La lista de inversiones no tiene un formato válido.')
+    if not all(field in item for item in investments for field in ('name', 'amount', 'roi')):
+        raise ValueError('Cada inversión debe incluir nombre, importe y rentabilidad.')
+    if not isinstance(banks, list) or not all(isinstance(item, dict) for item in banks):
+        raise ValueError('La lista de bancos no tiene un formato válido.')
+    if not isinstance(reserved, list) or not all(isinstance(item, dict) for item in reserved):
+        raise ValueError('La lista de inversiones reservadas no tiene un formato válido.')
+    return {
+        'investments': investments,
+        'banks': banks,
+        'reserved_investments': reserved,
+    }
 
 def load_banks():
     if not DATA_FILE.exists():
@@ -537,8 +608,47 @@ def generate_colors(n):
     pool = ['#7c5cff','#00d4ff','#ff6b6b','#ffd166','#4ade80','#60a5fa','#d946ef','#ff8c42']
     return [pool[i % len(pool)] for i in range(n)]
 
+@st.dialog('Backups')
+def backups_dialog():
+    st.write('Exporta todos tus datos o importa un archivo JSON para restaurarlos.')
+    st.caption(f'La copia automática anterior se guarda en `{BACKUP_FILE.name}`.')
+
+    st.download_button(
+        'Exportar datos JSON',
+        DATA_FILE.read_text(encoding='utf-8'),
+        file_name='investments_streamlit.json',
+        mime='application/json',
+        icon=':material/download:',
+        width='stretch',
+    )
+
+    uploaded_data = st.file_uploader(
+        'Archivo JSON o respaldo .bak',
+        type=['json', 'bak'],
+        key='data_import_file',
+    )
+    if st.button('Importar datos', icon=':material/upload:', disabled=uploaded_data is None):
+        try:
+            imported_data = validate_import_data(
+                json.loads(uploaded_data.getvalue().decode('utf-8'))
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            st.error(f'No se pudieron importar los datos: {error}')
+        else:
+            write_data_file(imported_data)
+            for state_key in (
+                'df', 'banks', 'reserved_investments', 'pending_edit',
+                'pending_delete', 'pending_bank_delete', 'show_reserved_dialog',
+            ):
+                st.session_state.pop(state_key, None)
+            st.session_state.notification = {
+                'message': 'Datos importados correctamente. Se creó una copia de seguridad.',
+                'icon': '✅',
+            }
+            st.rerun()
+
 def main():
-    st.title('Dashboard de Inversiones')
+    st.title('Mis inversiones')
 
     notification = st.session_state.pop('notification', None)
     if notification:
@@ -574,9 +684,16 @@ def main():
         st.session_state.show_reserved_dialog = False
         reserved_investments_dialog()
 
-    with st.container():
+    with st.container(horizontal=True, horizontal_alignment='right'):
         csv = st.session_state.df.to_csv(index=False)
-        st.download_button('Exportar CSV', csv, file_name='investments.csv', use_container_width=True)
+        st.download_button(
+            'Exportar CSV',
+            csv,
+            file_name='investments.csv',
+            icon=':material/download:',
+        )
+        if st.button('Backups', icon=':material/backup:'):
+            backups_dialog()
 
     st.divider()
 
@@ -744,27 +861,34 @@ def main():
             st.metric('Total invertido', format_euros(df['amount'].sum()))
 
     st.divider()
-    with st.container(border=True):
+    with st.container(border=True, key='benefits_allocation_layout'):
         row2_col1, row2_col2 = st.columns([1, 1])
 
         with row2_col1:
             st.subheader('Distribución por porcentaje')
             total_invested = df['amount'].sum()
+            chart_df = df.sort_values('allocation_pct', ascending=False, kind='stable')
             fig = px.pie(
-                df,
+                chart_df,
                 names='name',
                 values='amount',
                 hole=0.58,
                 color_discrete_sequence=generate_colors(len(df)),
             )
             fig.update_traces(
-                textinfo='percent',
-                textposition='inside',
+                sort=False,
+                direction='clockwise',
+                rotation=0,
+                textinfo='label+percent',
+                textposition='outside',
+                automargin=True,
+                textfont_size=12,
                 hovertemplate='<b>%{label}</b><br>%{percent}<br>%{value:,.2f} €<extra></extra>',
             )
             fig.update_layout(
                 template='plotly_dark',
-                margin=dict(t=10, b=10, l=10, r=10),
+                height=600,
+                margin=dict(t=30, b=30, l=50, r=50),
                 paper_bgcolor='#33384b',
                 plot_bgcolor='#33384b',
                 legend=dict(font=dict(color='#f1f3f8')),
@@ -795,7 +919,9 @@ def main():
             display_df['Beneficio'] = display_df['Beneficio'].map(format_euros)
             display_df['% Asignación'] = display_df['% Asignación'].map(lambda value: f'{value:.1f}%')
             st.markdown(
-                display_df.to_html(index=False, classes='benefits-table', escape=False),
+                '<div class="benefits-table-scroll">'
+                f'{display_df.to_html(index=False, classes="benefits-table", escape=False)}'
+                '</div>',
                 unsafe_allow_html=True,
             )
 
@@ -881,7 +1007,10 @@ def main():
                     [1.2, 1.7, 1.1, 1.2, 0.45]
                 )
                 with name_col:
-                    st.write(bank['name'])
+                    st.markdown(
+                        f'<strong style="color: white">{escape(str(bank["name"]))}</strong>',
+                        unsafe_allow_html=True,
+                    )
                 with iban_col:
                     st.write(bank['iban'] or 'Sin IBAN')
                 with bic_col:
