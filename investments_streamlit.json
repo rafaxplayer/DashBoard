@@ -2,6 +2,7 @@
   "investments": [
     {
       "name": "Go¬Grow",
+      "category": "CrowdLending",
       "link": "https://app.bondora.com/es/gogrow",
       "amount": 6002.81,
       "roi": 6.0,
@@ -14,6 +15,7 @@
     },
     {
       "name": "Hive5",
+      "category": "CrowdLending",
       "link": "https://hive5.com/",
       "amount": 4157.6,
       "roi": 12.32,
@@ -26,6 +28,7 @@
     },
     {
       "name": "My Investor (MSCI)",
+      "category": "Fondos idx",
       "link": "https://newapp.myinvestor.es/auth/signin",
       "amount": 5643.67,
       "roi": 22.65,
@@ -38,6 +41,7 @@
     },
     {
       "name": "Monefit",
+      "category": "CrowdLending",
       "link": "https://smartsaver.monefit.com/es/summary",
       "amount": 5710.86,
       "roi": 7.5,
@@ -50,6 +54,7 @@
     },
     {
       "name": "Indemo",
+      "category": "CrowdLending",
       "link": "https://app.indemo.eu/",
       "amount": 2132.04,
       "roi": 15.1,
@@ -62,6 +67,7 @@
     },
     {
       "name": "My Investor ( Nike)",
+      "category": "Acciones",
       "link": "https://newapp.myinvestor.es/auth/signin",
       "amount": 200.0,
       "roi": 0.0,
@@ -74,6 +80,7 @@
     },
     {
       "name": "Loanch",
+      "category": "CrowdLending",
       "link": "https://loanch.com/es",
       "amount": 3013.23,
       "roi": 14.5,
@@ -86,6 +93,7 @@
     },
     {
       "name": "My Investor (Gold)",
+      "category": "ETF",
       "link": "https://newapp.myinvestor.es/auth/signin",
       "amount": 213.21,
       "roi": 0.0,
@@ -132,6 +140,7 @@
   "reserved_investments": [
     {
       "name": "Esketik",
+      "category": "Otros",
       "link": "https://esketit.com/investor",
       "amount": 0.0,
       "roi": 11.0,
@@ -144,6 +153,7 @@
     },
     {
       "name": "Maclear",
+      "category": "Otros",
       "link": "https://app.maclear.ch/es/dashboard/overview",
       "amount": 0.0,
       "roi": 0.0,
@@ -156,6 +166,7 @@
     },
     {
       "name": "Renault Bank",
+      "category": "Otros",
       "link": "https://areaprivada.renaultbank.es/",
       "amount": 2004.12,
       "roi": 2.15,
@@ -168,6 +179,7 @@
     },
     {
       "name": "TWINO (Flexi)",
+      "category": "Otros",
       "link": "https://www.twino.eu/es/auth/dashboard",
       "amount": 3010.43,
       "roi": 6.0,

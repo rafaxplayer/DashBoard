@@ -10,6 +10,15 @@ from urllib.parse import urlparse
 
 DATA_FILE = Path('investments_streamlit.json')
 BACKUP_FILE = DATA_FILE.with_suffix(DATA_FILE.suffix + '.bak')
+INVESTMENT_CATEGORIES = (
+    'Otros',
+    'Acciones',
+    'ETF',
+    'Fondos idx',
+    'CrowdLending',
+    'C. Remunerada',
+    'Depositos',
+)
 
 st.set_page_config(page_title='Mis inversiones', layout='wide')
 
@@ -199,6 +208,21 @@ st.markdown('''
         text-align: left;
     }
 
+    div[data-testid="stDataFrame"] {
+        font-size: 1rem !important;
+    }
+
+    div[data-testid="stDataFrame"] thead th {
+        background: #1f5ca8 !important;
+        color: white !important;
+        font-size: 1.02rem !important;
+        font-weight: 700 !important;
+    }
+
+    div[data-testid="stDataFrame"] tbody td {
+        font-size: 1rem !important;
+    }
+
     .benefits-table td {
         border-bottom: 1px solid #454b61;
         padding: 0.65rem 0.5rem;
@@ -254,6 +278,20 @@ st.markdown('''
         color: var(--text);
         font-weight: 600;
         line-height: 1.25;
+    }
+
+    .portfolio-category {
+        display: inline-block;
+        margin-top: 0.35rem;
+        padding: 0.18rem 0.5rem;
+        background: rgba(94, 73, 245, 0.22);
+        border: 1px solid rgba(164, 150, 255, 0.7);
+        border-radius: 999px;
+        color: #dfe6ff;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: none;
     }
 
     .transfer-info {
@@ -313,21 +351,24 @@ def load_data():
             stored_data = json.load(data_file)
         investments = stored_data.get('investments', []) if isinstance(stored_data, dict) else stored_data
         df = pd.DataFrame(investments)
+        if 'category' not in df.columns:
+            df['category'] = 'Otros'
         if 'link' not in df.columns:
             df['link'] = ''
         if 'note' not in df.columns:
             df['note'] = ''
+        df['category'] = df['category'].fillna('Otros').astype(str)
         df['note'] = df['note'].fillna('').astype(str)
         for field in transfer_fields:
             if field not in df.columns:
                 df[field] = ''
             df[field] = df[field].fillna('').astype(str)
-        return df[['name', 'link', 'amount', 'roi', 'note', *transfer_fields]]
+        return df[['name', 'category', 'link', 'amount', 'roi', 'note', *transfer_fields]]
     else:
         df = pd.DataFrame([
-            {'name':'BTC','link':'https://bitcoin.org/','amount':12000.0,'roi':18.5,'note':'', **dict.fromkeys(transfer_fields, '')},
-            {'name':'ETF Global','link':'','amount':8000.0,'roi':6.2,'note':'', **dict.fromkeys(transfer_fields, '')},
-            {'name':'Ahorros','link':'','amount':2000.0,'roi':1.1,'note':'', **dict.fromkeys(transfer_fields, '')}
+            {'name':'BTC','category':'Acciones','link':'https://bitcoin.org/','amount':12000.0,'roi':18.5,'note':'', **dict.fromkeys(transfer_fields, '')},
+            {'name':'ETF Global','category':'ETF','link':'','amount':8000.0,'roi':6.2,'note':'', **dict.fromkeys(transfer_fields, '')},
+            {'name':'Ahorros','category':'Depositos','link':'','amount':2000.0,'roi':1.1,'note':'', **dict.fromkeys(transfer_fields, '')}
         ])
         save_data(df)
         return df
@@ -338,18 +379,19 @@ def load_reserved_investments():
     with DATA_FILE.open('r', encoding='utf-8') as data_file:
         stored_data = json.load(data_file)
     reserved = stored_data.get('reserved_investments', []) if isinstance(stored_data, dict) else []
-    fields = ('name', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
+    fields = ('name', 'category', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
               'account_number', 'bic_swift', 'payment_reference')
     normalized = []
     for investment in reserved:
         item = {field: investment.get(field, '') for field in fields}
         item['name'] = str(item['name']) or 'Sin nombre'
+        item['category'] = str(item.get('category') or 'Otros')
         item['link'] = str(item['link'])
         amount = pd.to_numeric(item['amount'], errors='coerce')
         roi = pd.to_numeric(item['roi'], errors='coerce')
         item['amount'] = float(0.0 if pd.isna(amount) else amount)
         item['roi'] = float(0.0 if pd.isna(roi) else roi)
-        for field in fields[4:]:
+        for field in fields[5:]:
             item[field] = str(item[field] or '')
         normalized.append(item)
     return normalized
@@ -526,6 +568,7 @@ def add_investment_from_form():
 
     new = pd.DataFrame([{
         'name': name,
+        'category': st.session_state.get('new_category', 'Otros').strip() or 'Otros',
         'link': st.session_state.get('new_link', '').strip(),
         'amount': float(st.session_state.get('new_amount', 0.0)),
         'roi': float(st.session_state.get('new_roi', 0.0)),
@@ -542,7 +585,7 @@ def add_investment_from_form():
     st.session_state.selected_reserved_index = None
     st.session_state.load_reserved_form = False
     for field in (
-        'new_name', 'new_link', 'new_note', 'new_beneficiary', 'new_bank_name',
+        'new_name', 'new_category', 'new_link', 'new_note', 'new_beneficiary', 'new_bank_name',
         'new_account_number', 'new_bic_swift', 'new_payment_reference',
     ):
         st.session_state[field] = ''
@@ -566,6 +609,12 @@ def edit_investment_dialog(row_index):
     investment = st.session_state.df.loc[row_index]
     with st.form(f'edit_form_{row_index}'):
         name = st.text_input('Nombre / Inversión', value=str(investment['name']))
+        category = st.selectbox(
+            'Categoría',
+            options=INVESTMENT_CATEGORIES,
+            index=INVESTMENT_CATEGORIES.index(str(investment.get('category', 'Otros')))
+            if str(investment.get('category', 'Otros')) in INVESTMENT_CATEGORIES else 0,
+        )
         link = st.text_input('Enlace', value=str(investment.get('link', '')), placeholder='https://...')
         amount = st.number_input('Cantidad invertida (€)', min_value=0.0, value=float(investment['amount']), step=0.01)
         roi = st.number_input('Rentabilidad (%)', value=float(investment['roi']), step=0.01)
@@ -587,10 +636,10 @@ def edit_investment_dialog(row_index):
         st.rerun()
     if save:
         st.session_state.df.loc[row_index, [
-            'name', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
+            'name', 'category', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
             'account_number', 'bic_swift', 'payment_reference',
         ]] = [
-            name or 'Sin nombre', link.strip(), float(amount), float(roi), note.strip(),
+            name or 'Sin nombre', category, link.strip(), float(amount), float(roi), note.strip(),
             beneficiary.strip(), bank_name.strip(), account_number.strip(),
             bic_swift.strip(), payment_reference.strip(),
         ]
@@ -662,15 +711,18 @@ def main():
         st.session_state.df = load_data()
     elif 'link' not in st.session_state.df.columns:
         st.session_state.df['link'] = ''
+    if 'category' not in st.session_state.df.columns:
+        st.session_state.df['category'] = 'Otros'
     if 'note' not in st.session_state.df.columns:
         st.session_state.df['note'] = ''
+    st.session_state.df['category'] = st.session_state.df['category'].fillna('Otros').astype(str)
     st.session_state.df['note'] = st.session_state.df['note'].fillna('').astype(str)
     transfer_fields = ('beneficiary', 'bank_name', 'account_number', 'bic_swift', 'payment_reference')
     for field in transfer_fields:
         if field not in st.session_state.df.columns:
             st.session_state.df[field] = ''
         st.session_state.df[field] = st.session_state.df[field].fillna('').astype(str)
-    st.session_state.df = st.session_state.df[['name', 'link', 'amount', 'roi', 'note', *transfer_fields]]
+    st.session_state.df = st.session_state.df[['name', 'category', 'link', 'amount', 'roi', 'note', *transfer_fields]]
     if 'banks' not in st.session_state:
         st.session_state.banks = load_banks()
     st.session_state.banks = st.session_state.banks[['name', 'iban', 'bic_swift', 'holder']]
@@ -774,6 +826,7 @@ def main():
                 )
                 new_values = {
                     'new_name': selected_investment.get('name', ''),
+                    'new_category': selected_investment.get('category', 'Acciones'),
                     'new_link': selected_investment.get('link', ''),
                     'new_amount': float(selected_investment.get('amount', 0.0)),
                     'new_roi': float(selected_investment.get('roi', 0.0)),
@@ -790,6 +843,12 @@ def main():
                 for field, value in new_values.items():
                     st.session_state.setdefault(field, value)
                 name = st.text_input('Nombre / Inversión', key='new_name')
+                category = st.selectbox(
+                    'Categoría',
+                    options=INVESTMENT_CATEGORIES,
+                    index=0,
+                    key='new_category',
+                )
                 link = st.text_input('Enlace', placeholder='https://...', key='new_link')
                 amount = st.number_input('Cantidad invertida (€)', min_value=0.0, step=0.01, key='new_amount')
                 roi = st.number_input('Rentabilidad (%)', step=0.01, key='new_roi')
@@ -807,6 +866,27 @@ def main():
 
         with row1_col2:
             st.header('Portfolio')
+            sort_options = {
+                'Nombre': 'name',
+                'Categoría': 'category',
+                'Invertido (€)': 'amount',
+                'Rentabilidad (%)': 'roi',
+            }
+            portfolio_sort = st.selectbox(
+                'Ordenar portfolio por',
+                options=list(sort_options.keys()),
+                index=1,
+                help='Ordena el portfolio de mayor a menor según la columna seleccionada.',
+            )
+            if 'pending_edit' in st.session_state and st.session_state.pending_edit is not None:
+                st.session_state.pending_edit = None
+            if 'pending_delete' in st.session_state and st.session_state.pending_delete is not None:
+                st.session_state.pending_delete = None
+            portfolio_df = st.session_state.df.sort_values(
+                sort_options[portfolio_sort],
+                ascending=False,
+                kind='stable',
+            )
             st.markdown(
                 '<div class="portfolio-header"><span>Nombre / Plataforma</span>'
                 '<span>Enlace</span><span>Invertido (€)</span><span>Rentabilidad (%)</span>'
@@ -814,15 +894,21 @@ def main():
                 unsafe_allow_html=True,
             )
             portfolio_rows = []
-            for row_index, investment in st.session_state.df.iterrows():
+            for row_index, investment in portfolio_df.iterrows():
                 widget_id = investment_widget_id(investment)
-                name_col, link_col, amount_col, roi_col, actions_col = st.columns([1.7, 1.3, 1, 1, 0.8])
+                name_col, link_col, amount_col, roi_col, actions_col = st.columns(
+                    [1.7, 1.3, 1, 1, 0.8],
+                    vertical_alignment='center',
+                )
                 with name_col:
                     note = escape(str(investment.get('note', '')).strip())
+                    category = escape(str(investment.get('category', 'Otros')).strip() or 'Otros')
                     note_html = f'<div class="portfolio-note">{note}</div>' if note else ''
                     st.markdown(
                         f'<div class="portfolio-name">{escape(str(investment["name"]))}'
-                        f'{transfer_info_html(investment)}{note_html}</div>',
+                        f'{transfer_info_html(investment)}'
+                        f'<div class="portfolio-category">{category}</div>'
+                        f'{note_html}</div>',
                         unsafe_allow_html=True,
                     )
                 with link_col:
@@ -833,7 +919,7 @@ def main():
                 with roi_col:
                     st.write(f'{float(investment["roi"]):.2f}%')
                 with actions_col:
-                    edit_col, delete_col = st.columns(2)
+                    edit_col, delete_col = st.columns(2, vertical_alignment='center')
                     with edit_col:
                         st.button(
                             '',
@@ -865,15 +951,36 @@ def main():
         row2_col1, row2_col2 = st.columns([1, 1])
 
         with row2_col1:
-            st.subheader('Distribución por porcentaje')
+            chart_mode = st.radio(
+                'Vista de distribución',
+                options=['Por inversión', 'Por categoría'],
+                horizontal=True,
+                index=0,
+            )
+            st.subheader(
+                'Distribución por porcentaje por categoría' if chart_mode == 'Por categoría'
+                else 'Distribución por porcentaje'
+            )
             total_invested = df['amount'].sum()
-            chart_df = df.sort_values('allocation_pct', ascending=False, kind='stable')
+            if chart_mode == 'Por categoría':
+                category_df = df.groupby('category', dropna=False).agg(amount=('amount', 'sum')).reset_index()
+                category_df['category'] = category_df['category'].fillna('Otros').astype(str)
+                category_df['percent'] = (category_df['amount'] / category_df['amount'].sum() * 100.0).fillna(0.0)
+                chart_df = category_df.sort_values('amount', ascending=False, kind='stable')
+                names_col = 'category'
+                values_col = 'amount'
+                hover_template = '<b>%{label}</b><br>%{percent}<br>%{value:,.2f} €<extra></extra>'
+            else:
+                chart_df = df.sort_values('allocation_pct', ascending=False, kind='stable')
+                names_col = 'name'
+                values_col = 'amount'
+                hover_template = '<b>%{label}</b><br>%{percent}<br>%{value:,.2f} €<extra></extra>'
             fig = px.pie(
                 chart_df,
-                names='name',
-                values='amount',
+                names=names_col,
+                values=values_col,
                 hole=0.58,
-                color_discrete_sequence=generate_colors(len(df)),
+                color_discrete_sequence=generate_colors(len(chart_df)),
             )
             fig.update_traces(
                 sort=False,
@@ -883,7 +990,7 @@ def main():
                 textposition='outside',
                 automargin=True,
                 textfont_size=12,
-                hovertemplate='<b>%{label}</b><br>%{percent}<br>%{value:,.2f} €<extra></extra>',
+                hovertemplate=hover_template,
             )
             fig.update_layout(
                 template='plotly_dark',
@@ -902,7 +1009,20 @@ def main():
 
         with row2_col2:
             st.subheader('Tabla con beneficios y asignación')
-            display_df = df[['name','amount','roi','profit','allocation_pct']].rename(columns={
+            sort_options = {
+                'Invertido': 'amount',
+                'Rentabilidad (%)': 'roi',
+                'Beneficio': 'profit',
+                '% Asignación': 'allocation_pct',
+            }
+            sort_column = st.selectbox(
+                'Ordenar por',
+                options=list(sort_options.keys()),
+                index=2,
+                help='Ordena la tabla por la columna seleccionada de mayor a menor.',
+            )
+            display_df = df.sort_values(sort_options[sort_column], ascending=False, kind='stable')
+            display_df = display_df[['name','amount','roi','profit','allocation_pct']].rename(columns={
                 'name':'Nombre','amount':'Invertido','roi':'Rentabilidad (%)','profit':'Beneficio','allocation_pct':'% Asignación'
             })
             display_df['Nombre'] = display_df.apply(
