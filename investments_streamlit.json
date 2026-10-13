@@ -4,7 +4,7 @@
       "name": "Go¬Grow",
       "category": "CrowdLending",
       "link": "https://app.bondora.com/es/gogrow",
-      "amount": 6002.81,
+      "amount": 6011.44,
       "roi": 6.0,
       "note": "Fondo de emergencia",
       "beneficiary": "Go And Grow OÜ",
@@ -17,7 +17,7 @@
       "name": "Hive5",
       "category": "CrowdLending",
       "link": "https://hive5.com/",
-      "amount": 4157.6,
+      "amount": 4158.96,
       "roi": 12.32,
       "note": "",
       "beneficiary": "Hive5 marketplace d.o.o.",
@@ -30,7 +30,7 @@
       "name": "My Investor (MSCI)",
       "category": "Fondos idx",
       "link": "https://newapp.myinvestor.es/auth/signin",
-      "amount": 5643.67,
+      "amount": 5843.14,
       "roi": 22.65,
       "note": "",
       "beneficiary": "",
@@ -43,7 +43,7 @@
       "name": "Monefit",
       "category": "CrowdLending",
       "link": "https://smartsaver.monefit.com/es/summary",
-      "amount": 5710.86,
+      "amount": 5721.05,
       "roi": 7.5,
       "note": "",
       "beneficiary": "MONEFIT INVESTMENTS OÜ",
@@ -82,7 +82,7 @@
       "name": "Loanch",
       "category": "CrowdLending",
       "link": "https://loanch.com/es",
-      "amount": 3013.23,
+      "amount": 3013.32,
       "roi": 14.5,
       "note": "",
       "beneficiary": "PRZEMEK SAVJETOVANJE d.o.o.",
@@ -139,19 +139,6 @@
   ],
   "reserved_investments": [
     {
-      "name": "Esketik",
-      "category": "Otros",
-      "link": "https://esketit.com/investor",
-      "amount": 0.0,
-      "roi": 11.0,
-      "note": "Retirando para inversion en loanch",
-      "beneficiary": "Esketit Platform d.o.o.",
-      "bank_name": "Verified Payments UAB",
-      "account_number": "LT783750020003743569",
-      "bic_swift": "VEPALT2X",
-      "payment_reference": "INV-883742 JUAN RAFAEL SIMARRO FABA - Top-up user account"
-    },
-    {
       "name": "Maclear",
       "category": "Otros",
       "link": "https://app.maclear.ch/es/dashboard/overview",
@@ -189,6 +176,19 @@
       "account_number": "LV27PARX0027107683333",
       "bic_swift": "PARXLV22",
       "payment_reference": "Inversor Nº 171823 FLEXI"
+    },
+    {
+      "name": "Esketik",
+      "category": "Otros",
+      "link": "https://esketit.com/investor",
+      "amount": 0.0,
+      "roi": 11.0,
+      "note": "Retirando para inversion en loanch",
+      "beneficiary": "Esketit Platform d.o.o.",
+      "bank_name": "Verified Payments UAB",
+      "account_number": "LT783750020003743569",
+      "bic_swift": "VEPALT2X",
+      "payment_reference": "INV-883742 JUAN RAFAEL SIMARRO FABA - Top-up user account"
     }
   ]
 }

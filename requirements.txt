@@ -1,3 +1,4 @@
-streamlit>=1.34
+streamlit[auth]>=1.42
 pandas
 plotly
+firebase-admin>=6.5

@@ -7,6 +7,12 @@ import shutil
 from pathlib import Path
 from html import escape
 from urllib.parse import urlparse
+from firebase_store import (
+    SnapshotConflictError,
+    create_firestore_client,
+    read_portfolio_snapshot,
+    write_portfolio_snapshot,
+)
 
 DATA_FILE = Path('investments_streamlit.json')
 BACKUP_FILE = DATA_FILE.with_suffix(DATA_FILE.suffix + '.bak')
@@ -344,26 +350,23 @@ st.markdown('''
 </style>
 ''', unsafe_allow_html=True)
 
-def load_data():
+@st.cache_resource
+def get_firestore_client():
+    firebase_settings = st.secrets['firebase']
+    return create_firestore_client(
+        str(firebase_settings['project_id']),
+        Path(str(firebase_settings['service_account_file'])),
+    )
+
+
+def load_data(source_data=None):
     transfer_fields = ('beneficiary', 'bank_name', 'account_number', 'bic_swift', 'payment_reference')
-    if DATA_FILE.exists():
+    if source_data is not None:
+        investments = source_data.get('investments', [])
+    elif DATA_FILE.exists():
         with DATA_FILE.open('r', encoding='utf-8') as data_file:
             stored_data = json.load(data_file)
         investments = stored_data.get('investments', []) if isinstance(stored_data, dict) else stored_data
-        df = pd.DataFrame(investments)
-        if 'category' not in df.columns:
-            df['category'] = 'Otros'
-        if 'link' not in df.columns:
-            df['link'] = ''
-        if 'note' not in df.columns:
-            df['note'] = ''
-        df['category'] = df['category'].fillna('Otros').astype(str)
-        df['note'] = df['note'].fillna('').astype(str)
-        for field in transfer_fields:
-            if field not in df.columns:
-                df[field] = ''
-            df[field] = df[field].fillna('').astype(str)
-        return df[['name', 'category', 'link', 'amount', 'roi', 'note', *transfer_fields]]
     else:
         df = pd.DataFrame([
             {'name':'BTC','category':'Acciones','link':'https://bitcoin.org/','amount':12000.0,'roi':18.5,'note':'', **dict.fromkeys(transfer_fields, '')},
@@ -373,11 +376,29 @@ def load_data():
         save_data(df)
         return df
 
-def load_reserved_investments():
-    if not DATA_FILE.exists():
-        return []
-    with DATA_FILE.open('r', encoding='utf-8') as data_file:
-        stored_data = json.load(data_file)
+    df = pd.DataFrame(investments)
+    if 'category' not in df.columns:
+        df['category'] = 'Otros'
+    if 'link' not in df.columns:
+        df['link'] = ''
+    if 'note' not in df.columns:
+        df['note'] = ''
+    df['category'] = df['category'].fillna('Otros').astype(str)
+    df['note'] = df['note'].fillna('').astype(str)
+    for field in transfer_fields:
+        if field not in df.columns:
+            df[field] = ''
+        df[field] = df[field].fillna('').astype(str)
+    return df[['name', 'category', 'link', 'amount', 'roi', 'note', *transfer_fields]]
+
+def load_reserved_investments(source_data=None):
+    if source_data is None:
+        if not DATA_FILE.exists():
+            return []
+        with DATA_FILE.open('r', encoding='utf-8') as data_file:
+            stored_data = json.load(data_file)
+    else:
+        stored_data = source_data
     reserved = stored_data.get('reserved_investments', []) if isinstance(stored_data, dict) else []
     fields = ('name', 'category', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
               'account_number', 'bic_swift', 'payment_reference')
@@ -397,18 +418,61 @@ def load_reserved_investments():
     return normalized
 
 def save_data(df):
-    save_all_data(df, load_banks())
+    banks = st.session_state.get('banks')
+    if banks is None:
+        banks = load_banks()
+    reserved = st.session_state.get('reserved_investments')
+    if reserved is None:
+        reserved = load_reserved_investments()
+    return save_all_data(df, banks, reserved)
 
 def save_all_data(df, banks, reserved=None):
     if reserved is None:
-        reserved = load_reserved_investments()
-    write_data_file(
-        {
-            'investments': df.to_dict(orient='records'),
-            'banks': banks.to_dict(orient='records'),
-            'reserved_investments': reserved,
-        }
-    )
+        reserved = st.session_state.get('reserved_investments')
+        if reserved is None:
+            reserved = load_reserved_investments()
+    return persist_snapshot_data({
+        'investments': json.loads(df.to_json(orient='records')),
+        'banks': json.loads(banks.to_json(orient='records')),
+        'reserved_investments': reserved,
+    })
+
+def persist_snapshot_data(data, expected_revision=None, db=None):
+    if st.session_state.get('firebase_offline', False):
+        st.session_state.firebase_write_error = (
+            'No se pueden guardar cambios mientras se usa el respaldo local sin conexión.'
+        )
+        return False
+    if expected_revision is None:
+        expected_revision = st.session_state.get('firebase_revision', 0)
+    try:
+        revision = write_portfolio_snapshot(
+            db or get_firestore_client(),
+            data,
+            expected_revision,
+        )
+    except SnapshotConflictError:
+        st.session_state.firebase_write_error = (
+            'No se guardaron los cambios porque Firebase contiene una versión más reciente. '
+            'Se ha recargado la cartera actual; vuelve a aplicar el cambio.'
+        )
+        return False
+    except Exception:
+        st.session_state.firebase_write_error = (
+            'No se pudo guardar en Firebase. Comprueba la conexión y la configuración.'
+        )
+        return False
+
+    st.session_state.firebase_revision = revision
+    st.session_state.pop('firebase_write_error', None)
+    try:
+        write_data_file(data)
+        st.session_state.pop('firebase_backup_warning', None)
+    except OSError:
+        st.session_state.firebase_backup_warning = (
+            'Firebase guardó los datos, pero no se pudo actualizar el respaldo JSON local.'
+        )
+    return True
 
 def write_data_file(data):
     if DATA_FILE.exists():
@@ -422,6 +486,43 @@ def write_data_file(data):
             indent=2,
         )
     temporary_file.replace(DATA_FILE)
+
+def refresh_local_backup(data):
+    try:
+        if DATA_FILE.exists():
+            local_data = json.loads(DATA_FILE.read_text(encoding='utf-8'))
+            if local_data == data:
+                return
+        write_data_file(data)
+    except (OSError, json.JSONDecodeError):
+        st.session_state.firebase_backup_warning = (
+            'No se pudo actualizar el respaldo JSON local desde Firebase.'
+        )
+
+def validate_firestore_data(data):
+    if not isinstance(data, dict):
+        raise ValueError('El documento de Firebase no contiene una cartera válida.')
+    validated = {}
+    for section in ('investments', 'banks', 'reserved_investments'):
+        items = data.get(section, [])
+        if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+            raise ValueError(f'La sección {section} de Firebase tiene un formato no válido.')
+        validated[section] = items
+    return validated
+
+def load_backup_snapshot():
+    if not DATA_FILE.exists():
+        raise FileNotFoundError('No se encontró el respaldo investments_streamlit.json.')
+    return validate_firestore_data(
+        json.loads(DATA_FILE.read_text(encoding='utf-8'))
+    )
+
+def load_portfolio_source(db, fallback_revision=0):
+    try:
+        cloud_data, revision = read_portfolio_snapshot(db)
+    except Exception:
+        return load_backup_snapshot(), fallback_revision, True
+    return cloud_data, revision, False
 
 def validate_import_data(data):
     if isinstance(data, list):
@@ -448,11 +549,14 @@ def validate_import_data(data):
         'reserved_investments': reserved,
     }
 
-def load_banks():
-    if not DATA_FILE.exists():
-        return pd.DataFrame(columns=['name', 'iban', 'bic_swift', 'holder'])
-    with DATA_FILE.open('r', encoding='utf-8') as data_file:
-        stored_data = json.load(data_file)
+def load_banks(source_data=None):
+    if source_data is None:
+        if not DATA_FILE.exists():
+            return pd.DataFrame(columns=['name', 'iban', 'bic_swift', 'holder'])
+        with DATA_FILE.open('r', encoding='utf-8') as data_file:
+            stored_data = json.load(data_file)
+    else:
+        stored_data = source_data
     banks = stored_data.get('banks', []) if isinstance(stored_data, dict) else []
     df = pd.DataFrame(banks)
     for field in ('name', 'iban', 'bic_swift', 'holder'):
@@ -579,9 +683,14 @@ def add_investment_from_form():
         'bic_swift': st.session_state.get('new_bic_swift', '').strip(),
         'payment_reference': st.session_state.get('new_payment_reference', '').strip(),
     }])
-    st.session_state.df = pd.concat([st.session_state.df, new], ignore_index=True)
-    if selected is not None and selected < len(st.session_state.reserved_investments):
-        st.session_state.reserved_investments.pop(selected)
+    new_df = pd.concat([st.session_state.df, new], ignore_index=True)
+    new_reserved = list(st.session_state.reserved_investments)
+    if selected is not None and selected < len(new_reserved):
+        new_reserved.pop(selected)
+    if not save_all_data(new_df, st.session_state.banks, new_reserved):
+        return
+    st.session_state.df = new_df
+    st.session_state.reserved_investments = new_reserved
     st.session_state.selected_reserved_index = None
     st.session_state.load_reserved_form = False
     for field in (
@@ -591,11 +700,6 @@ def add_investment_from_form():
         st.session_state[field] = ''
     st.session_state.new_amount = 0.0
     st.session_state.new_roi = 0.0
-    save_all_data(
-        st.session_state.df,
-        st.session_state.banks,
-        st.session_state.reserved_investments,
-    )
     st.session_state.notification = {
         'message': 'Inversión añadida correctamente',
         'icon': '✅',
@@ -603,6 +707,10 @@ def add_investment_from_form():
 
 def request_edit(row_index):
     st.session_state.pending_edit = int(row_index)
+
+def clear_pending_portfolio_actions():
+    st.session_state.pending_edit = None
+    st.session_state.pending_delete = None
 
 @st.dialog('Editar inversión')
 def edit_investment_dialog(row_index):
@@ -627,7 +735,12 @@ def edit_investment_dialog(row_index):
             payment_reference = st.text_input('Referencia de pago', value=str(investment.get('payment_reference', '')))
         save_col, cancel_col = st.columns(2)
         with save_col:
-            save = st.form_submit_button('Guardar', type='primary', use_container_width=True)
+            save = st.form_submit_button(
+                'Guardar',
+                type='primary',
+                use_container_width=True,
+                disabled=st.session_state.get('firebase_offline', False),
+            )
         with cancel_col:
             cancel = st.form_submit_button('Cancelar', use_container_width=True)
 
@@ -635,7 +748,8 @@ def edit_investment_dialog(row_index):
         st.session_state.pending_edit = None
         st.rerun()
     if save:
-        st.session_state.df.loc[row_index, [
+        updated_df = st.session_state.df.copy()
+        updated_df.loc[row_index, [
             'name', 'category', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
             'account_number', 'bic_swift', 'payment_reference',
         ]] = [
@@ -643,10 +757,12 @@ def edit_investment_dialog(row_index):
             beneficiary.strip(), bank_name.strip(), account_number.strip(),
             bic_swift.strip(), payment_reference.strip(),
         ]
-        save_data(st.session_state.df)
-        st.session_state.pending_edit = None
-        st.session_state.notification = {'message': 'Inversión actualizada correctamente', 'icon': '✅'}
-        st.rerun()
+        if save_data(updated_df):
+            st.session_state.df = updated_df
+            st.session_state.pending_edit = None
+            st.session_state.notification = {'message': 'Inversión actualizada correctamente', 'icon': '✅'}
+            st.rerun()
+        st.error(st.session_state.pop('firebase_write_error', 'No se pudo guardar la inversión.'))
 
 def investment_widget_id(investment):
     values = tuple(str(investment.get(field, '')) for field in ('name', 'link', 'amount', 'roi'))
@@ -676,7 +792,11 @@ def backups_dialog():
         type=['json', 'bak'],
         key='data_import_file',
     )
-    if st.button('Importar datos', icon=':material/upload:', disabled=uploaded_data is None):
+    if st.button(
+        'Importar datos',
+        icon=':material/upload:',
+        disabled=uploaded_data is None or st.session_state.get('firebase_offline', False),
+    ):
         try:
             imported_data = validate_import_data(
                 json.loads(uploaded_data.getvalue().decode('utf-8'))
@@ -684,24 +804,131 @@ def backups_dialog():
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
             st.error(f'No se pudieron importar los datos: {error}')
         else:
-            write_data_file(imported_data)
-            for state_key in (
-                'df', 'banks', 'reserved_investments', 'pending_edit',
-                'pending_delete', 'pending_bank_delete', 'show_reserved_dialog',
-            ):
-                st.session_state.pop(state_key, None)
+            if persist_snapshot_data(imported_data):
+                for state_key in (
+                    'df', 'banks', 'reserved_investments', 'pending_edit',
+                    'pending_delete', 'pending_bank_delete', 'show_reserved_dialog',
+                ):
+                    st.session_state.pop(state_key, None)
+                st.session_state.notification = {
+                    'message': 'Datos importados en Firebase. Se actualizó el respaldo local.',
+                    'icon': '✅',
+                }
+                st.rerun()
+            st.error(st.session_state.pop('firebase_write_error', 'No se pudieron importar los datos.'))
+
+def render_app_header():
+    with st.container(horizontal=True, vertical_alignment='center', gap='small'):
+        st.image('investments.png', width=48)
+        st.title('Mis inversiones')
+
+def require_google_owner():
+    try:
+        owner_email = str(st.secrets['firebase']['owner_email']).strip().casefold()
+    except Exception:
+        st.error('Configura Google Authentication y las credenciales de Firebase en .streamlit/secrets.toml.')
+        st.stop()
+
+    if not st.user.is_logged_in:
+        render_app_header()
+        st.info('Inicia sesión con la cuenta de Google autorizada.')
+        if st.button('Iniciar sesión con Google', type='primary', icon=':material/login:'):
+            st.login()
+        st.stop()
+
+    email = str(st.user.get('email', '')).strip().casefold()
+    if email != owner_email or st.user.get('email_verified') is not True:
+        st.error('Esta cuenta de Google no está autorizada para acceder a estos datos.')
+        if st.button('Cerrar sesión', icon=':material/logout:'):
+            st.logout()
+        st.stop()
+    return owner_email
+
+def initialize_firestore_from_local(db):
+    st.title('Migrar datos a Firebase')
+    st.info('Firestore aún no tiene una cartera. Puedes importar ahora el JSON local.')
+    if not DATA_FILE.exists():
+        st.error('No se encontró investments_streamlit.json para realizar la migración.')
+        st.stop()
+    if st.button('Migrar JSON local a Firebase', type='primary', icon=':material/cloud_upload:'):
+        try:
+            local_data = validate_import_data(
+                json.loads(DATA_FILE.read_text(encoding='utf-8'))
+            )
+            revision = write_portfolio_snapshot(db, local_data, expected_revision=0)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            st.error(f'No se pudo leer el JSON: {error}')
+        except SnapshotConflictError:
+            st.rerun()
+        except Exception:
+            st.error('No se pudo inicializar Firestore. Comprueba las credenciales y la conexión.')
+        else:
+            st.session_state.firebase_revision = revision
+            try:
+                write_data_file(local_data)
+            except OSError:
+                st.session_state.firebase_backup_warning = (
+                    'Firebase se inicializó, pero no se pudo actualizar el respaldo local.'
+                )
             st.session_state.notification = {
-                'message': 'Datos importados correctamente. Se creó una copia de seguridad.',
+                'message': 'Datos migrados correctamente a Firebase.',
                 'icon': '✅',
             }
             st.rerun()
+    st.stop()
 
 def main():
-    st.title('Mis inversiones')
+    owner_email = require_google_owner()
+    try:
+        db = get_firestore_client()
+        cloud_data, cloud_revision, offline_mode = load_portfolio_source(
+            db,
+            st.session_state.get('firebase_revision', 0),
+        )
+    except Exception:
+        st.error('No se pudo acceder a Firestore y tampoco cargar el respaldo JSON local.')
+        st.stop()
+    if cloud_data is None:
+        initialize_firestore_from_local(db)
+    try:
+        cloud_data = validate_firestore_data(cloud_data)
+    except ValueError as error:
+        st.error(str(error))
+        st.stop()
+
+    st.session_state.firebase_offline = offline_mode
+    if not offline_mode:
+        st.session_state.firebase_revision = cloud_revision
+        refresh_local_backup(cloud_data)
+    st.session_state.df = load_data(cloud_data)
+    st.session_state.banks = load_banks(cloud_data)
+    st.session_state.reserved_investments = load_reserved_investments(cloud_data)
+
+    render_app_header()
+    account_col, logout_col = st.columns([5, 1], vertical_alignment='center')
+    with account_col:
+        st.caption(f'Cuenta Google: {owner_email}')
+    with logout_col:
+        if st.button('Cerrar sesión', icon=':material/logout:', width='stretch'):
+            st.logout()
+            st.stop()
+
+    if offline_mode:
+        st.warning(
+            'No hay conexión con Firestore. Se muestran los datos del JSON local en modo de solo lectura.'
+        )
+        if st.button('Reintentar conexión con Firebase', icon=':material/refresh:'):
+            st.rerun()
 
     notification = st.session_state.pop('notification', None)
     if notification:
         st.toast(notification['message'], icon=notification['icon'])
+    write_error = st.session_state.pop('firebase_write_error', None)
+    if write_error:
+        st.error(write_error)
+    backup_warning = st.session_state.pop('firebase_backup_warning', None)
+    if backup_warning:
+        st.warning(backup_warning)
     form_error = st.session_state.pop('investment_form_error', None)
     if form_error:
         st.error(form_error)
@@ -776,23 +1003,32 @@ def main():
         )
         confirm_col, cancel_col, _ = st.columns([1, 1, 3])
         with confirm_col:
-            if st.button('Confirmar eliminación', type='primary', key='confirm_delete'):
+            if st.button(
+                'Confirmar eliminación',
+                type='primary',
+                key='confirm_delete',
+                disabled=st.session_state.get('firebase_offline', False),
+            ):
+                new_df = st.session_state.df.drop(index=pending_index).reset_index(drop=True)
+                new_reserved = list(st.session_state.reserved_investments)
                 if save_for_later:
-                    st.session_state.reserved_investments.append(
+                    new_reserved.append(
                         st.session_state.df.loc[pending_index].to_dict()
                     )
-                st.session_state.df = st.session_state.df.drop(index=pending_index).reset_index(drop=True)
-                save_all_data(
-                    st.session_state.df,
+                if save_all_data(
+                    new_df,
                     st.session_state.banks,
-                    st.session_state.reserved_investments,
-                )
-                st.session_state.pending_delete = None
-                st.session_state.notification = {
-                    'message': f'Inversión «{pending_name}» eliminada',
-                    'icon': '🗑️',
-                }
-                st.rerun()
+                    new_reserved,
+                ):
+                    st.session_state.df = new_df
+                    st.session_state.reserved_investments = new_reserved
+                    st.session_state.pending_delete = None
+                    st.session_state.notification = {
+                        'message': f'Inversión «{pending_name}» eliminada',
+                        'icon': '🗑️',
+                    }
+                    st.rerun()
+                st.error(st.session_state.pop('firebase_write_error', 'No se pudo eliminar la inversión.'))
         with cancel_col:
             if st.button('Cancelar', key='cancel_delete'):
                 st.session_state.pending_delete = None
@@ -862,6 +1098,7 @@ def main():
                 st.form_submit_button(
                     'Añadir inversión',
                     on_click=add_investment_from_form,
+                    disabled=st.session_state.get('firebase_offline', False),
                 )
 
         with row1_col2:
@@ -877,11 +1114,9 @@ def main():
                 options=list(sort_options.keys()),
                 index=1,
                 help='Ordena el portfolio de mayor a menor según la columna seleccionada.',
+                key='portfolio_sort',
+                on_change=clear_pending_portfolio_actions,
             )
-            if 'pending_edit' in st.session_state and st.session_state.pending_edit is not None:
-                st.session_state.pending_edit = None
-            if 'pending_delete' in st.session_state and st.session_state.pending_delete is not None:
-                st.session_state.pending_delete = None
             portfolio_df = st.session_state.df.sort_values(
                 sort_options[portfolio_sort],
                 ascending=False,
@@ -1057,7 +1292,10 @@ def main():
                 iban = st.text_input('IBAN')
                 bic_swift = st.text_input('BIC/SWIFT')
                 holder = st.text_input('Titular')
-                add_bank = st.form_submit_button('Añadir banco')
+                add_bank = st.form_submit_button(
+                    'Añadir banco',
+                    disabled=st.session_state.get('firebase_offline', False),
+                )
                 if add_bank:
                     new_bank = pd.DataFrame([{
                         'name': bank_name.strip() or 'Sin nombre',
@@ -1065,15 +1303,17 @@ def main():
                         'bic_swift': bic_swift.strip(),
                         'holder': holder.strip(),
                     }])
-                    st.session_state.banks = pd.concat(
+                    new_banks = pd.concat(
                         [st.session_state.banks, new_bank], ignore_index=True
                     )
-                    save_all_data(st.session_state.df, st.session_state.banks)
-                    st.session_state.notification = {
-                        'message': 'Banco añadido correctamente',
-                        'icon': '✅',
-                    }
-                    st.rerun()
+                    if save_all_data(st.session_state.df, new_banks):
+                        st.session_state.banks = new_banks
+                        st.session_state.notification = {
+                            'message': 'Banco añadido correctamente',
+                            'icon': '✅',
+                        }
+                        st.rerun()
+                    st.error(st.session_state.pop('firebase_write_error', 'No se pudo añadir el banco.'))
 
         with table_col:
             pending_bank_delete = st.session_state.get('pending_bank_delete')
@@ -1099,17 +1339,24 @@ def main():
                 st.warning(f'¿Seguro que quieres eliminar el banco «{pending_bank_name}»?')
                 confirm_col, cancel_col = st.columns(2)
                 with confirm_col:
-                    if st.button('Confirmar eliminación', type='primary', key='confirm_bank_delete'):
-                        st.session_state.banks = st.session_state.banks.drop(
+                    if st.button(
+                        'Confirmar eliminación',
+                        type='primary',
+                        key='confirm_bank_delete',
+                        disabled=st.session_state.get('firebase_offline', False),
+                    ):
+                        new_banks = st.session_state.banks.drop(
                             index=pending_bank_index
                         ).reset_index(drop=True)
-                        save_all_data(st.session_state.df, st.session_state.banks)
-                        st.session_state.pending_bank_delete = None
-                        st.session_state.notification = {
-                            'message': f'Banco «{pending_bank_name}» eliminado',
-                            'icon': '🗑️',
-                        }
-                        st.rerun()
+                        if save_all_data(st.session_state.df, new_banks):
+                            st.session_state.banks = new_banks
+                            st.session_state.pending_bank_delete = None
+                            st.session_state.notification = {
+                                'message': f'Banco «{pending_bank_name}» eliminado',
+                                'icon': '🗑️',
+                            }
+                            st.rerun()
+                        st.error(st.session_state.pop('firebase_write_error', 'No se pudo eliminar el banco.'))
                 with cancel_col:
                     if st.button('Cancelar', key='cancel_bank_delete'):
                         st.session_state.pending_bank_delete = None
