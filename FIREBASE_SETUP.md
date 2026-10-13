@@ -20,6 +20,8 @@
 
 Streamlit pide iniciar sesión con Google y solo admite el correo verificado configurado en `owner_email`. Si el documento no existe, muestra un botón para importar el JSON local una vez; no sobrescribe una cartera que ya exista en Firestore. Firestore será la base compartida y el JSON quedará como respaldo local.
 
+Mientras la sesión está abierta, Streamlit escucha los cambios de `portfolio/current` en Firestore y actualiza la vista automáticamente (comprobación visual cada dos segundos). Los cambios guardados desde Android aparecen sin recargar manualmente la página.
+
 Si falla la lectura de Firestore, la app muestra el JSON local con un aviso y entra en modo de solo lectura: altas, ediciones, borrados e importación quedan desactivados para no pisar cambios cloud al reconectar. El botón **Reintentar conexión con Firebase** vuelve a probar Firestore. El primer inicio de sesión Google requiere internet; el respaldo aplica cuando ya hay una sesión autenticada.
 
 Si publicas Streamlit en un servidor, cambia `auth.redirect_uri` y los URI autorizados de Google al dominio HTTPS real.

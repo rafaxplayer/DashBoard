@@ -8,6 +8,7 @@ from pathlib import Path
 from html import escape
 from urllib.parse import urlparse
 from firebase_store import (
+    PortfolioListener,
     SnapshotConflictError,
     create_firestore_client,
     read_portfolio_snapshot,
@@ -359,6 +360,11 @@ def get_firestore_client():
     )
 
 
+@st.cache_resource
+def get_portfolio_listener(_db):
+    return PortfolioListener(_db)
+
+
 def load_data(source_data=None):
     transfer_fields = ('beneficiary', 'bank_name', 'account_number', 'bic_swift', 'payment_reference')
     if source_data is not None:
@@ -417,16 +423,16 @@ def load_reserved_investments(source_data=None):
         normalized.append(item)
     return normalized
 
-def save_data(df):
+def save_data(df, expected_revision=None):
     banks = st.session_state.get('banks')
     if banks is None:
         banks = load_banks()
     reserved = st.session_state.get('reserved_investments')
     if reserved is None:
         reserved = load_reserved_investments()
-    return save_all_data(df, banks, reserved)
+    return save_all_data(df, banks, reserved, expected_revision)
 
-def save_all_data(df, banks, reserved=None):
+def save_all_data(df, banks, reserved=None, expected_revision=None):
     if reserved is None:
         reserved = st.session_state.get('reserved_investments')
         if reserved is None:
@@ -435,7 +441,7 @@ def save_all_data(df, banks, reserved=None):
         'investments': json.loads(df.to_json(orient='records')),
         'banks': json.loads(banks.to_json(orient='records')),
         'reserved_investments': reserved,
-    })
+    }, expected_revision=expected_revision)
 
 def persist_snapshot_data(data, expected_revision=None, db=None):
     if st.session_state.get('firebase_offline', False):
@@ -464,6 +470,7 @@ def persist_snapshot_data(data, expected_revision=None, db=None):
         return False
 
     st.session_state.firebase_revision = revision
+    st.session_state.firebase_snapshot = data
     st.session_state.pop('firebase_write_error', None)
     try:
         write_data_file(data)
@@ -652,7 +659,12 @@ def reserved_investments_dialog():
                 st.rerun()
 
 def add_investment_from_form():
-    name = st.session_state.get('new_name', '').strip() or 'Sin nombre'
+    name = st.session_state.get('new_name', '').strip()
+    st.session_state.pop('investment_form_error', None)
+    if not name:
+        st.session_state.investment_form_error = 'El nombre de la inversión es obligatorio.'
+        return
+
     name_key = investment_name_key(name)
     existing_names = {
         investment_name_key(value)
@@ -707,14 +719,26 @@ def add_investment_from_form():
 
 def request_edit(row_index):
     st.session_state.pending_edit = int(row_index)
+    st.session_state.pending_edit_revision = st.session_state.firebase_revision
 
 def clear_pending_portfolio_actions():
     st.session_state.pending_edit = None
+    st.session_state.pop('pending_edit_revision', None)
     st.session_state.pending_delete = None
 
 @st.dialog('Editar inversión')
 def edit_investment_dialog(row_index):
     investment = st.session_state.df.loc[row_index]
+    expected_revision = st.session_state.get(
+        'pending_edit_revision',
+        st.session_state.firebase_revision,
+    )
+    stale_revision = expected_revision != st.session_state.firebase_revision
+    if stale_revision:
+        st.warning(
+            'La cartera cambió mientras editabas. Cierra este formulario y vuelve a abrirlo '
+            'para evitar sobrescribir cambios recientes.'
+        )
     with st.form(f'edit_form_{row_index}'):
         name = st.text_input('Nombre / Inversión', value=str(investment['name']))
         category = st.selectbox(
@@ -739,13 +763,14 @@ def edit_investment_dialog(row_index):
                 'Guardar',
                 type='primary',
                 use_container_width=True,
-                disabled=st.session_state.get('firebase_offline', False),
+                disabled=st.session_state.get('firebase_offline', False) or stale_revision,
             )
         with cancel_col:
             cancel = st.form_submit_button('Cancelar', use_container_width=True)
 
     if cancel:
         st.session_state.pending_edit = None
+        st.session_state.pop('pending_edit_revision', None)
         st.rerun()
     if save:
         updated_df = st.session_state.df.copy()
@@ -757,9 +782,10 @@ def edit_investment_dialog(row_index):
             beneficiary.strip(), bank_name.strip(), account_number.strip(),
             bic_swift.strip(), payment_reference.strip(),
         ]
-        if save_data(updated_df):
+        if save_data(updated_df, expected_revision):
             st.session_state.df = updated_df
             st.session_state.pending_edit = None
+            st.session_state.pop('pending_edit_revision', None)
             st.session_state.notification = {'message': 'Inversión actualizada correctamente', 'icon': '✅'}
             st.rerun()
         st.error(st.session_state.pop('firebase_write_error', 'No se pudo guardar la inversión.'))
@@ -807,7 +833,8 @@ def backups_dialog():
             if persist_snapshot_data(imported_data):
                 for state_key in (
                     'df', 'banks', 'reserved_investments', 'pending_edit',
-                    'pending_delete', 'pending_bank_delete', 'show_reserved_dialog',
+                    'pending_edit_revision', 'pending_delete', 'pending_bank_delete',
+                    'show_reserved_dialog',
                 ):
                     st.session_state.pop(state_key, None)
                 st.session_state.notification = {
@@ -864,6 +891,7 @@ def initialize_firestore_from_local(db):
             st.error('No se pudo inicializar Firestore. Comprueba las credenciales y la conexión.')
         else:
             st.session_state.firebase_revision = revision
+            st.session_state.firebase_snapshot = local_data
             try:
                 write_data_file(local_data)
             except OSError:
@@ -877,17 +905,65 @@ def initialize_firestore_from_local(db):
             st.rerun()
     st.stop()
 
+@st.fragment(run_every='2s')
+def watch_portfolio_updates(listener):
+    if st.session_state.get('firebase_offline', False):
+        return
+
+    payload, revision = listener.get_snapshot()
+    if revision > st.session_state.get('firebase_revision', 0):
+        st.session_state.firebase_snapshot = payload
+        st.session_state.firebase_revision = revision
+        st.rerun(scope='app')
+
+
 def main():
     owner_email = require_google_owner()
     try:
         db = get_firestore_client()
-        cloud_data, cloud_revision, offline_mode = load_portfolio_source(
-            db,
-            st.session_state.get('firebase_revision', 0),
-        )
     except Exception:
         st.error('No se pudo acceder a Firestore y tampoco cargar el respaldo JSON local.')
         st.stop()
+    try:
+        listener = get_portfolio_listener(db)
+        listener_start_error = None
+    except Exception as error:
+        listener = None
+        listener_start_error = str(error)
+
+    if listener is not None:
+        watch_portfolio_updates(listener)
+
+    retry_requested = st.session_state.pop('firebase_retry', False)
+    force_reload = not st.session_state.get('firebase_initialized', False) or retry_requested
+    if force_reload:
+        try:
+            cloud_data, cloud_revision, offline_mode = load_portfolio_source(
+                db,
+                st.session_state.get('firebase_revision', 0),
+            )
+        except Exception:
+            st.error('No se pudo acceder a Firestore y tampoco cargar el respaldo JSON local.')
+            st.stop()
+        if listener is not None:
+            listener_data, listener_revision = listener.get_snapshot()
+            if listener_revision > cloud_revision:
+                cloud_data, cloud_revision = listener_data, listener_revision
+        st.session_state.firebase_snapshot = cloud_data
+        st.session_state.firebase_revision = cloud_revision
+        st.session_state.firebase_offline = offline_mode
+        st.session_state.firebase_initialized = True
+    else:
+        cloud_data = st.session_state.firebase_snapshot
+        cloud_revision = st.session_state.firebase_revision
+        offline_mode = st.session_state.firebase_offline
+        if not offline_mode and listener is not None:
+            listener_data, listener_revision = listener.get_snapshot()
+            if listener_revision > cloud_revision:
+                cloud_data, cloud_revision = listener_data, listener_revision
+                st.session_state.firebase_snapshot = cloud_data
+                st.session_state.firebase_revision = cloud_revision
+
     if cloud_data is None:
         initialize_firestore_from_local(db)
     try:
@@ -905,20 +981,26 @@ def main():
     st.session_state.reserved_investments = load_reserved_investments(cloud_data)
 
     render_app_header()
-    account_col, logout_col = st.columns([5, 1], vertical_alignment='center')
-    with account_col:
-        st.caption(f'Cuenta Google: {owner_email}')
-    with logout_col:
-        if st.button('Cerrar sesión', icon=':material/logout:', width='stretch'):
-            st.logout()
-            st.stop()
+    st.caption(f'Cuenta Google: {owner_email}')
 
     if offline_mode:
         st.warning(
             'No hay conexión con Firestore. Se muestran los datos del JSON local en modo de solo lectura.'
         )
         if st.button('Reintentar conexión con Firebase', icon=':material/refresh:'):
+            st.session_state.firebase_retry = True
             st.rerun()
+    elif listener_start_error:
+        st.warning(f'No se pudo iniciar la escucha de Firestore: {listener_start_error}')
+    elif listener and listener.get_error():
+        listener_error = listener.get_error()
+        if listener_error == "'list' object has no attribute 'exists'":
+            st.warning(
+                'La escucha de Firestore sigue ejecutando código antiguo. Detén todas las '
+                'instancias de Streamlit y vuelve a iniciar la app para cargar el listener corregido.'
+            )
+        else:
+            st.warning(f'No se pudieron recibir actualizaciones de Firestore: {listener_error}')
 
     notification = st.session_state.pop('notification', None)
     if notification:
@@ -963,16 +1045,26 @@ def main():
         st.session_state.show_reserved_dialog = False
         reserved_investments_dialog()
 
-    with st.container(horizontal=True, horizontal_alignment='right'):
+    with st.container(
+        key='header_actions',
+        horizontal=True,
+        horizontal_alignment='right',
+        vertical_alignment='center',
+        gap='small',
+    ):
         csv = st.session_state.df.to_csv(index=False)
         st.download_button(
             'Exportar CSV',
             csv,
             file_name='investments.csv',
             icon=':material/download:',
+            width='content',
         )
-        if st.button('Backups', icon=':material/backup:'):
+        if st.button('Backups', icon=':material/backup:', width='content'):
             backups_dialog()
+        if st.button('Cerrar sesión', icon=':material/logout:', width='content'):
+            st.logout()
+            st.stop()
 
     st.divider()
 
@@ -1297,23 +1389,26 @@ def main():
                     disabled=st.session_state.get('firebase_offline', False),
                 )
                 if add_bank:
-                    new_bank = pd.DataFrame([{
-                        'name': bank_name.strip() or 'Sin nombre',
-                        'iban': iban.strip(),
-                        'bic_swift': bic_swift.strip(),
-                        'holder': holder.strip(),
-                    }])
-                    new_banks = pd.concat(
-                        [st.session_state.banks, new_bank], ignore_index=True
-                    )
-                    if save_all_data(st.session_state.df, new_banks):
-                        st.session_state.banks = new_banks
-                        st.session_state.notification = {
-                            'message': 'Banco añadido correctamente',
-                            'icon': '✅',
-                        }
-                        st.rerun()
-                    st.error(st.session_state.pop('firebase_write_error', 'No se pudo añadir el banco.'))
+                    if not bank_name.strip():
+                        st.error('El nombre del banco es obligatorio.')
+                    else:
+                        new_bank = pd.DataFrame([{
+                            'name': bank_name.strip(),
+                            'iban': iban.strip(),
+                            'bic_swift': bic_swift.strip(),
+                            'holder': holder.strip(),
+                        }])
+                        new_banks = pd.concat(
+                            [st.session_state.banks, new_bank], ignore_index=True
+                        )
+                        if save_all_data(st.session_state.df, new_banks):
+                            st.session_state.banks = new_banks
+                            st.session_state.notification = {
+                                'message': 'Banco añadido correctamente',
+                                'icon': '✅',
+                            }
+                            st.rerun()
+                        st.error(st.session_state.pop('firebase_write_error', 'No se pudo añadir el banco.'))
 
         with table_col:
             pending_bank_delete = st.session_state.get('pending_bank_delete')
@@ -1396,7 +1491,9 @@ def main():
                         use_container_width=True,
                     )
 
-    st.caption('Los datos se guardan localmente en `investments_streamlit.json`')
+    st.caption(
+        'Los cambios de Firebase se escuchan en tiempo real y la vista se actualiza automáticamente.'
+    )
 
 if __name__ == '__main__':
     main()

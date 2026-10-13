@@ -2,206 +2,206 @@
   "investments": [
     {
       "name": "Go¬Grow",
-      "bic_swift": "LHVBEE22",
-      "amount": 6011.44,
-      "account_number": "EE777700771004427507",
       "category": "CrowdLending",
-      "payment_reference": "15366001 GG1268674",
-      "note": "Fondo de emergencia",
       "link": "https://app.bondora.com/es/gogrow",
+      "amount": 6011.44,
       "roi": 6.0,
+      "note": "Fondo de emergencia",
       "beneficiary": "Go And Grow OÜ",
-      "bank_name": "AS LHV Pank"
+      "bank_name": "AS LHV Pank",
+      "account_number": "EE777700771004427507",
+      "bic_swift": "LHVBEE22",
+      "payment_reference": "15366001 GG1268674"
     },
     {
       "name": "Hive5",
-      "bic_swift": "VEPALT2XXXX",
-      "amount": 4158.96,
-      "account_number": "LT323750020003742845",
       "category": "CrowdLending",
-      "payment_reference": "Addition for investor ID 310334",
-      "note": "",
       "link": "https://hive5.com/",
+      "amount": 4158.96,
       "roi": 12.32,
+      "note": "",
       "beneficiary": "Hive5 marketplace d.o.o.",
-      "bank_name": "VERIFIED PAYMENTS UAB"
+      "bank_name": "VERIFIED PAYMENTS UAB",
+      "account_number": "LT323750020003742845",
+      "bic_swift": "VEPALT2XXXX",
+      "payment_reference": "Addition for investor ID 310334"
     },
     {
       "name": "My Investor (MSCI)",
-      "bic_swift": "",
-      "amount": 5843.14,
-      "account_number": "",
       "category": "Fondos idx",
-      "payment_reference": "",
-      "note": "",
       "link": "https://newapp.myinvestor.es/auth/signin",
+      "amount": 5843.14,
       "roi": 22.65,
+      "note": "",
       "beneficiary": "",
-      "bank_name": ""
+      "bank_name": "",
+      "account_number": "",
+      "bic_swift": "",
+      "payment_reference": ""
     },
     {
       "name": "Monefit",
-      "bic_swift": "TRWIBEB1XXX",
-      "amount": 5721.05,
-      "account_number": "BE07967577916666",
       "category": "CrowdLending",
-      "payment_reference": "500114872400",
-      "note": "",
       "link": "https://smartsaver.monefit.com/es/summary",
+      "amount": 5721.05,
       "roi": 7.5,
+      "note": "",
       "beneficiary": "MONEFIT INVESTMENTS OÜ",
-      "bank_name": "WISE EUROPE S.A"
+      "bank_name": "WISE EUROPE S.A",
+      "account_number": "BE07967577916666",
+      "bic_swift": "TRWIBEB1XXX",
+      "payment_reference": "500114872400"
     },
     {
       "name": "Indemo",
-      "bic_swift": "LHVBEE22",
-      "amount": 2132.04,
-      "account_number": "EE267700771009403652",
       "category": "CrowdLending",
-      "payment_reference": "ID:3572696 Juan Rafael Simarro Faba",
-      "note": "",
       "link": "https://app.indemo.eu/",
+      "amount": 2132.04,
       "roi": 15.1,
+      "note": "",
       "beneficiary": "INDEMO SIA",
-      "bank_name": "AS LHV Pank"
+      "bank_name": "AS LHV Pank",
+      "account_number": "EE267700771009403652",
+      "bic_swift": "LHVBEE22",
+      "payment_reference": "ID:3572696 Juan Rafael Simarro Faba"
     },
     {
       "name": "My Investor ( Nike)",
-      "bic_swift": "",
-      "amount": 200.0,
-      "account_number": "",
       "category": "Acciones",
-      "payment_reference": "",
-      "note": "",
       "link": "https://newapp.myinvestor.es/auth/signin",
+      "amount": 212.07,
       "roi": 0.0,
+      "note": "",
       "beneficiary": "",
-      "bank_name": ""
+      "bank_name": "",
+      "account_number": "",
+      "bic_swift": "",
+      "payment_reference": ""
     },
     {
       "name": "Loanch",
-      "bic_swift": "KUSRLT24XXX",
-      "amount": 3013.32,
-      "account_number": "LT103750020003743726",
       "category": "CrowdLending",
-      "payment_reference": "Deposit to LoanchID 462280",
-      "note": "",
       "link": "https://loanch.com/es",
+      "amount": 3013.32,
       "roi": 14.5,
+      "note": "",
       "beneficiary": "PRZEMEK SAVJETOVANJE d.o.o.",
-      "bank_name": "AB Mano bankas"
+      "bank_name": "AB Mano bankas",
+      "account_number": "LT103750020003743726",
+      "bic_swift": "KUSRLT24XXX",
+      "payment_reference": "Deposit to LoanchID 462280"
     },
     {
       "name": "My Investor (Gold)",
-      "bic_swift": "",
-      "amount": 213.21,
-      "account_number": "",
       "category": "ETF",
-      "payment_reference": "",
-      "note": "",
       "link": "https://newapp.myinvestor.es/auth/signin",
+      "amount": 213.21,
       "roi": 0.0,
+      "note": "",
       "beneficiary": "",
-      "bank_name": ""
+      "bank_name": "",
+      "account_number": "",
+      "bic_swift": "",
+      "payment_reference": ""
     },
     {
-      "name": "caca",
-      "bic_swift": "",
-      "amount": 0.0,
-      "account_number": "",
-      "category": "Otros",
-      "payment_reference": "",
-      "note": "",
+      "name": "pedo",
+      "category": "Acciones",
       "link": "",
+      "amount": 10000.0,
       "roi": 0.0,
+      "note": "",
       "beneficiary": "",
-      "bank_name": ""
+      "bank_name": "",
+      "account_number": "",
+      "bic_swift": "",
+      "payment_reference": ""
     }
   ],
   "banks": [
     {
-      "bic_swift": "",
-      "holder": "JUAN RAFAEL SIMARRO FABA",
+      "name": "Renault",
       "iban": "ES8415080001250015007123",
-      "name": "Renault"
+      "bic_swift": "",
+      "holder": "JUAN RAFAEL SIMARRO FABA"
     },
     {
-      "bic_swift": "BSCH ES MM XXX",
-      "holder": "JUAN RAFAEL SIMARRO FABA",
+      "name": "Santander",
       "iban": "ES7900495525512714340673",
-      "name": "Santander"
+      "bic_swift": "BSCH ES MM XXX",
+      "holder": "JUAN RAFAEL SIMARRO FABA"
     },
     {
-      "bic_swift": "NTSBESN1XXX",
-      "holder": "Juan Rafael Simarro Faba",
+      "name": "N26",
       "iban": "ES0415632626353261237985",
-      "name": "N26"
+      "bic_swift": "NTSBESN1XXX",
+      "holder": "Juan Rafael Simarro Faba"
     },
     {
-      "bic_swift": "BACAESMMXXX",
-      "holder": "JUAN RAFAEL SIMARRO FABA",
+      "name": "My Investor",
       "iban": "ES8415447889706650740290",
-      "name": "My Investor"
+      "bic_swift": "BACAESMMXXX",
+      "holder": "JUAN RAFAEL SIMARRO FABA"
     },
     {
-      "bic_swift": "TRWIBEB1XXX",
-      "holder": "juan rafael simarro faba",
+      "name": "Wise",
       "iban": "BE23905286905391",
-      "name": "Wise"
+      "bic_swift": "TRWIBEB1XXX",
+      "holder": "juan rafael simarro faba"
     }
   ],
   "reserved_investments": [
     {
       "name": "Maclear",
-      "bic_swift": "SAPYGB2L",
-      "amount": 0.0,
-      "account_number": "GB82SAPY60838240856399",
       "category": "Otros",
-      "payment_reference": "Deposit to account No. MC103520",
-      "note": "",
       "link": "https://app.maclear.ch/es/dashboard/overview",
+      "amount": 0.0,
       "roi": 0.0,
+      "note": "",
       "beneficiary": "Maclear AG",
-      "bank_name": "BVNK EUR"
+      "bank_name": "BVNK EUR",
+      "account_number": "GB82SAPY60838240856399",
+      "bic_swift": "SAPYGB2L",
+      "payment_reference": "Deposit to account No. MC103520"
     },
     {
       "name": "Renault Bank",
-      "bic_swift": "",
-      "amount": 2004.12,
-      "account_number": "",
       "category": "Otros",
-      "payment_reference": "",
-      "note": "",
       "link": "https://areaprivada.renaultbank.es/",
+      "amount": 2004.12,
       "roi": 2.15,
+      "note": "",
       "beneficiary": "",
-      "bank_name": ""
+      "bank_name": "",
+      "account_number": "",
+      "bic_swift": "",
+      "payment_reference": ""
     },
     {
       "name": "TWINO (Flexi)",
-      "bic_swift": "PARXLV22",
-      "amount": 3010.43,
-      "account_number": "LV27PARX0027107683333",
       "category": "Otros",
-      "payment_reference": "Inversor Nº 171823 FLEXI",
-      "note": "",
       "link": "https://www.twino.eu/es/auth/dashboard",
+      "amount": 3010.43,
       "roi": 6.0,
+      "note": "",
       "beneficiary": "AS TWINO Investments",
-      "bank_name": "Citadele"
+      "bank_name": "Citadele",
+      "account_number": "LV27PARX0027107683333",
+      "bic_swift": "PARXLV22",
+      "payment_reference": "Inversor Nº 171823 FLEXI"
     },
     {
       "name": "Esketik",
-      "bic_swift": "VEPALT2X",
-      "amount": 0.0,
-      "account_number": "LT783750020003743569",
       "category": "Otros",
-      "payment_reference": "INV-883742 JUAN RAFAEL SIMARRO FABA - Top-up user account",
-      "note": "Retirando para inversion en loanch",
       "link": "https://esketit.com/investor",
+      "amount": 0.0,
       "roi": 11.0,
+      "note": "Retirando para inversion en loanch",
       "beneficiary": "Esketit Platform d.o.o.",
-      "bank_name": "Verified Payments UAB"
+      "bank_name": "Verified Payments UAB",
+      "account_number": "LT783750020003743569",
+      "bic_swift": "VEPALT2X",
+      "payment_reference": "INV-883742 JUAN RAFAEL SIMARRO FABA - Top-up user account"
     }
   ]
 }

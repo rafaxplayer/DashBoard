@@ -1,3 +1,5 @@
+from threading import Lock
+
 from firebase_admin import credentials, firestore, get_app, initialize_app
 
 
@@ -6,6 +8,52 @@ PORTFOLIO_DOCUMENT = 'portfolio/current'
 
 class SnapshotConflictError(RuntimeError):
     pass
+
+
+class PortfolioListener:
+    def __init__(self, db):
+        self._lock = Lock()
+        self._payload = None
+        self._revision = 0
+        self._error = None
+        document_ref = db.document(PORTFOLIO_DOCUMENT)
+        self._watch = document_ref.on_snapshot(self._receive_snapshot)
+
+    def _receive_snapshot(self, document, changes, read_time):
+        try:
+            if isinstance(document, (list, tuple)):
+                if len(document) > 1:
+                    raise ValueError('Firestore devolvió más de un documento en la escucha.')
+                document = document[0] if document else None
+
+            if document is None or not document.exists:
+                payload, revision = None, 0
+            else:
+                stored = document.to_dict() or {}
+                payload = stored.get('payload')
+                revision = stored.get('revision')
+                if not isinstance(payload, dict) or type(revision) is not int or revision < 1:
+                    raise ValueError('El documento de Firebase no contiene una cartera válida.')
+        except Exception as error:
+            with self._lock:
+                self._error = str(error)
+            return
+
+        with self._lock:
+            self._payload = payload
+            self._revision = revision
+            self._error = None
+
+    def get_snapshot(self):
+        with self._lock:
+            return self._payload, self._revision
+
+    def get_error(self):
+        with self._lock:
+            return self._error
+
+    def close(self):
+        self._watch.unsubscribe()
 
 
 def create_firestore_client(project_id, service_account_path):
