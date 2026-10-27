@@ -26,6 +26,7 @@ INVESTMENT_CATEGORIES = (
     'C. Remunerada',
     'Depositos',
 )
+ISIN_CATEGORIES = ('Fondos idx', 'ETF', 'Acciones')
 
 st.set_page_config(page_title='Mis inversiones', layout='wide')
 
@@ -375,9 +376,9 @@ def load_data(source_data=None):
         investments = stored_data.get('investments', []) if isinstance(stored_data, dict) else stored_data
     else:
         df = pd.DataFrame([
-            {'name':'BTC','category':'Acciones','link':'https://bitcoin.org/','amount':12000.0,'roi':18.5,'note':'', **dict.fromkeys(transfer_fields, '')},
-            {'name':'ETF Global','category':'ETF','link':'','amount':8000.0,'roi':6.2,'note':'', **dict.fromkeys(transfer_fields, '')},
-            {'name':'Ahorros','category':'Depositos','link':'','amount':2000.0,'roi':1.1,'note':'', **dict.fromkeys(transfer_fields, '')}
+            {'name':'BTC','category':'Acciones','link':'https://bitcoin.org/','amount':12000.0,'roi':18.5,'note':'','isin':'', **dict.fromkeys(transfer_fields, '')},
+            {'name':'ETF Global','category':'ETF','link':'','amount':8000.0,'roi':6.2,'note':'','isin':'', **dict.fromkeys(transfer_fields, '')},
+            {'name':'Ahorros','category':'Depositos','link':'','amount':2000.0,'roi':1.1,'note':'','isin':'', **dict.fromkeys(transfer_fields, '')}
         ])
         save_data(df)
         return df
@@ -389,13 +390,16 @@ def load_data(source_data=None):
         df['link'] = ''
     if 'note' not in df.columns:
         df['note'] = ''
+    if 'isin' not in df.columns:
+        df['isin'] = ''
     df['category'] = df['category'].fillna('Otros').astype(str)
     df['note'] = df['note'].fillna('').astype(str)
+    df['isin'] = df['isin'].fillna('').astype(str)
     for field in transfer_fields:
         if field not in df.columns:
             df[field] = ''
         df[field] = df[field].fillna('').astype(str)
-    return df[['name', 'category', 'link', 'amount', 'roi', 'note', *transfer_fields]]
+    return df[['name', 'category', 'isin', 'link', 'amount', 'roi', 'note', *transfer_fields]]
 
 def load_reserved_investments(source_data=None):
     if source_data is None:
@@ -407,7 +411,7 @@ def load_reserved_investments(source_data=None):
         stored_data = source_data
     reserved = stored_data.get('reserved_investments', []) if isinstance(stored_data, dict) else []
     fields = ('name', 'category', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
-              'account_number', 'bic_swift', 'payment_reference')
+              'account_number', 'bic_swift', 'payment_reference', 'isin')
     normalized = []
     for investment in reserved:
         item = {field: investment.get(field, '') for field in fields}
@@ -685,6 +689,10 @@ def add_investment_from_form():
     new = pd.DataFrame([{
         'name': name,
         'category': st.session_state.get('new_category', 'Otros').strip() or 'Otros',
+        'isin': (
+            st.session_state.get('new_isin', '').strip()
+            if st.session_state.get('new_category') in ISIN_CATEGORIES else ''
+        ),
         'link': st.session_state.get('new_link', '').strip(),
         'amount': float(st.session_state.get('new_amount', 0.0)),
         'roi': float(st.session_state.get('new_roi', 0.0)),
@@ -706,10 +714,11 @@ def add_investment_from_form():
     st.session_state.selected_reserved_index = None
     st.session_state.load_reserved_form = False
     for field in (
-        'new_name', 'new_category', 'new_link', 'new_note', 'new_beneficiary', 'new_bank_name',
+        'new_name', 'new_isin', 'new_link', 'new_note', 'new_beneficiary', 'new_bank_name',
         'new_account_number', 'new_bic_swift', 'new_payment_reference',
     ):
         st.session_state[field] = ''
+    st.session_state.new_category = 'Acciones'
     st.session_state.new_amount = 0.0
     st.session_state.new_roi = 0.0
     st.session_state.notification = {
@@ -739,13 +748,23 @@ def edit_investment_dialog(row_index):
             'La cartera cambió mientras editabas. Cierra este formulario y vuelve a abrirlo '
             'para evitar sobrescribir cambios recientes.'
         )
+    edit_category_key = f'edit_category_{row_index}'
+    category = st.selectbox(
+        'Categoría',
+        options=INVESTMENT_CATEGORIES,
+        index=INVESTMENT_CATEGORIES.index(str(investment.get('category', 'Otros')))
+        if str(investment.get('category', 'Otros')) in INVESTMENT_CATEGORIES else 0,
+        key=edit_category_key,
+    )
     with st.form(f'edit_form_{row_index}'):
         name = st.text_input('Nombre / Inversión', value=str(investment['name']))
-        category = st.selectbox(
-            'Categoría',
-            options=INVESTMENT_CATEGORIES,
-            index=INVESTMENT_CATEGORIES.index(str(investment.get('category', 'Otros')))
-            if str(investment.get('category', 'Otros')) in INVESTMENT_CATEGORIES else 0,
+        isin = (
+            st.text_input(
+                'ISIN',
+                value=str(investment.get('isin', '')),
+                key=f'edit_isin_{row_index}',
+            )
+            if category in ISIN_CATEGORIES else ''
         )
         link = st.text_input('Enlace', value=str(investment.get('link', '')), placeholder='https://...')
         amount = st.number_input('Cantidad invertida (€)', min_value=0.0, value=float(investment['amount']), step=0.01)
@@ -771,14 +790,16 @@ def edit_investment_dialog(row_index):
     if cancel:
         st.session_state.pending_edit = None
         st.session_state.pop('pending_edit_revision', None)
+        st.session_state.pop(edit_category_key, None)
+        st.session_state.pop(f'edit_isin_{row_index}', None)
         st.rerun()
     if save:
         updated_df = st.session_state.df.copy()
         updated_df.loc[row_index, [
-            'name', 'category', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
+            'name', 'category', 'isin', 'link', 'amount', 'roi', 'note', 'beneficiary', 'bank_name',
             'account_number', 'bic_swift', 'payment_reference',
         ]] = [
-            name or 'Sin nombre', category, link.strip(), float(amount), float(roi), note.strip(),
+            name or 'Sin nombre', category, isin.strip(), link.strip(), float(amount), float(roi), note.strip(),
             beneficiary.strip(), bank_name.strip(), account_number.strip(),
             bic_swift.strip(), payment_reference.strip(),
         ]
@@ -786,6 +807,8 @@ def edit_investment_dialog(row_index):
             st.session_state.df = updated_df
             st.session_state.pending_edit = None
             st.session_state.pop('pending_edit_revision', None)
+            st.session_state.pop(edit_category_key, None)
+            st.session_state.pop(f'edit_isin_{row_index}', None)
             st.session_state.notification = {'message': 'Inversión actualizada correctamente', 'icon': '✅'}
             st.rerun()
         st.error(st.session_state.pop('firebase_write_error', 'No se pudo guardar la inversión.'))
@@ -1024,14 +1047,19 @@ def main():
         st.session_state.df['category'] = 'Otros'
     if 'note' not in st.session_state.df.columns:
         st.session_state.df['note'] = ''
+    if 'isin' not in st.session_state.df.columns:
+        st.session_state.df['isin'] = ''
     st.session_state.df['category'] = st.session_state.df['category'].fillna('Otros').astype(str)
     st.session_state.df['note'] = st.session_state.df['note'].fillna('').astype(str)
+    st.session_state.df['isin'] = st.session_state.df['isin'].fillna('').astype(str)
     transfer_fields = ('beneficiary', 'bank_name', 'account_number', 'bic_swift', 'payment_reference')
     for field in transfer_fields:
         if field not in st.session_state.df.columns:
             st.session_state.df[field] = ''
         st.session_state.df[field] = st.session_state.df[field].fillna('').astype(str)
-    st.session_state.df = st.session_state.df[['name', 'category', 'link', 'amount', 'roi', 'note', *transfer_fields]]
+    st.session_state.df = st.session_state.df[
+        ['name', 'category', 'isin', 'link', 'amount', 'roi', 'note', *transfer_fields]
+    ]
     if 'banks' not in st.session_state:
         st.session_state.banks = load_banks()
     st.session_state.banks = st.session_state.banks[['name', 'iban', 'bic_swift', 'holder']]
@@ -1052,7 +1080,7 @@ def main():
         vertical_alignment='center',
         gap='small',
     ):
-        csv = st.session_state.df.to_csv(index=False)
+        csv = st.session_state.df.drop(columns='isin').to_csv(index=False)
         st.download_button(
             'Exportar CSV',
             csv,
@@ -1145,38 +1173,41 @@ def main():
                         use_container_width=True,
                     )
             st.markdown('<div class="add-form-gap"></div>', unsafe_allow_html=True)
-            with st.form('add_form'):
-                selected = st.session_state.get('selected_reserved_index')
-                selected_investment = (
-                    st.session_state.reserved_investments[selected]
-                    if selected is not None and selected < len(st.session_state.reserved_investments)
-                    else {}
-                )
-                new_values = {
-                    'new_name': selected_investment.get('name', ''),
-                    'new_category': selected_investment.get('category', 'Acciones'),
-                    'new_link': selected_investment.get('link', ''),
-                    'new_amount': float(selected_investment.get('amount', 0.0)),
-                    'new_roi': float(selected_investment.get('roi', 0.0)),
-                    'new_note': selected_investment.get('note', ''),
-                    'new_beneficiary': selected_investment.get('beneficiary', ''),
-                    'new_bank_name': selected_investment.get('bank_name', ''),
-                    'new_account_number': selected_investment.get('account_number', ''),
-                    'new_bic_swift': selected_investment.get('bic_swift', ''),
-                    'new_payment_reference': selected_investment.get('payment_reference', ''),
-                }
-                if st.session_state.pop('load_reserved_form', False):
-                    for field, value in new_values.items():
-                        st.session_state[field] = value
+            selected = st.session_state.get('selected_reserved_index')
+            selected_investment = (
+                st.session_state.reserved_investments[selected]
+                if selected is not None and selected < len(st.session_state.reserved_investments)
+                else {}
+            )
+            new_values = {
+                'new_name': selected_investment.get('name', ''),
+                'new_category': selected_investment.get('category', 'Acciones'),
+                'new_isin': selected_investment.get('isin', ''),
+                'new_link': selected_investment.get('link', ''),
+                'new_amount': float(selected_investment.get('amount', 0.0)),
+                'new_roi': float(selected_investment.get('roi', 0.0)),
+                'new_note': selected_investment.get('note', ''),
+                'new_beneficiary': selected_investment.get('beneficiary', ''),
+                'new_bank_name': selected_investment.get('bank_name', ''),
+                'new_account_number': selected_investment.get('account_number', ''),
+                'new_bic_swift': selected_investment.get('bic_swift', ''),
+                'new_payment_reference': selected_investment.get('payment_reference', ''),
+            }
+            if st.session_state.pop('load_reserved_form', False):
                 for field, value in new_values.items():
-                    st.session_state.setdefault(field, value)
+                    st.session_state[field] = value
+            for field, value in new_values.items():
+                st.session_state.setdefault(field, value)
+            st.selectbox(
+                'Categoría',
+                options=INVESTMENT_CATEGORIES,
+                index=0,
+                key='new_category',
+            )
+            with st.form('add_form'):
                 name = st.text_input('Nombre / Inversión', key='new_name')
-                category = st.selectbox(
-                    'Categoría',
-                    options=INVESTMENT_CATEGORIES,
-                    index=0,
-                    key='new_category',
-                )
+                if st.session_state.new_category in ISIN_CATEGORIES:
+                    st.text_input('ISIN', key='new_isin')
                 link = st.text_input('Enlace', placeholder='https://...', key='new_link')
                 amount = st.number_input('Cantidad invertida (€)', min_value=0.0, step=0.01, key='new_amount')
                 roi = st.number_input('Rentabilidad (%)', step=0.01, key='new_roi')

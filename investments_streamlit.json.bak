@@ -3,8 +3,9 @@
     {
       "name": "Go¬Grow",
       "category": "CrowdLending",
+      "isin": "",
       "link": "https://app.bondora.com/es/gogrow",
-      "amount": 6011.44,
+      "amount": 6025.85,
       "roi": 6.0,
       "note": "Fondo de emergencia",
       "beneficiary": "Go And Grow OÜ",
@@ -16,8 +17,9 @@
     {
       "name": "Hive5",
       "category": "CrowdLending",
+      "isin": "",
       "link": "https://hive5.com/",
-      "amount": 4158.96,
+      "amount": 4192.88,
       "roi": 12.32,
       "note": "",
       "beneficiary": "Hive5 marketplace d.o.o.",
@@ -27,10 +29,11 @@
       "payment_reference": "Addition for investor ID 310334"
     },
     {
-      "name": "My Investor (MSCI)",
+      "name": "MSCI World (MY Investor)",
       "category": "Fondos idx",
+      "isin": "IE00BYX5NX33",
       "link": "https://newapp.myinvestor.es/auth/signin",
-      "amount": 5843.14,
+      "amount": 5771.14,
       "roi": 22.65,
       "note": "",
       "beneficiary": "",
@@ -42,8 +45,9 @@
     {
       "name": "Monefit",
       "category": "CrowdLending",
+      "isin": "",
       "link": "https://smartsaver.monefit.com/es/summary",
-      "amount": 5721.05,
+      "amount": 5738.07,
       "roi": 7.5,
       "note": "",
       "beneficiary": "MONEFIT INVESTMENTS OÜ",
@@ -55,6 +59,7 @@
     {
       "name": "Indemo",
       "category": "CrowdLending",
+      "isin": "",
       "link": "https://app.indemo.eu/",
       "amount": 2132.04,
       "roi": 15.1,
@@ -66,23 +71,11 @@
       "payment_reference": "ID:3572696 Juan Rafael Simarro Faba"
     },
     {
-      "name": "My Investor ( Nike)",
-      "category": "Acciones",
-      "link": "https://newapp.myinvestor.es/auth/signin",
-      "amount": 212.07,
-      "roi": 0.0,
-      "note": "",
-      "beneficiary": "",
-      "bank_name": "",
-      "account_number": "",
-      "bic_swift": "",
-      "payment_reference": ""
-    },
-    {
       "name": "Loanch",
       "category": "CrowdLending",
+      "isin": "",
       "link": "https://loanch.com/es",
-      "amount": 3013.32,
+      "amount": 3015.76,
       "roi": 14.5,
       "note": "",
       "beneficiary": "PRZEMEK SAVJETOVANJE d.o.o.",
@@ -92,10 +85,11 @@
       "payment_reference": "Deposit to LoanchID 462280"
     },
     {
-      "name": "My Investor (Gold)",
+      "name": "Ishares Physical Golg ( My Investor)",
       "category": "ETF",
+      "isin": "IE00B4ND3602",
       "link": "https://newapp.myinvestor.es/auth/signin",
-      "amount": 213.21,
+      "amount": 355.95,
       "roi": 0.0,
       "note": "",
       "beneficiary": "",
@@ -105,10 +99,39 @@
       "payment_reference": ""
     },
     {
-      "name": "pedo",
-      "category": "Acciones",
+      "name": "My Investor (Cash)",
+      "category": "Otros",
+      "isin": "",
       "link": "",
-      "amount": 10000.0,
+      "amount": 2463.04,
+      "roi": 0.0,
+      "note": "",
+      "beneficiary": "",
+      "bank_name": "",
+      "account_number": "",
+      "bic_swift": "",
+      "payment_reference": ""
+    },
+    {
+      "name": "Vanguard Emerging Markets (My Investor)",
+      "category": "Fondos idx",
+      "isin": "IE0031786142",
+      "link": "https://newapp.myinvestor.es/",
+      "amount": 200.0,
+      "roi": 0.0,
+      "note": "",
+      "beneficiary": "",
+      "bank_name": "",
+      "account_number": "",
+      "bic_swift": "",
+      "payment_reference": ""
+    },
+    {
+      "name": "Vanguard Global Bond Index Fund EUR (My Investor)",
+      "category": "Acciones",
+      "isin": "IE00B18GC888",
+      "link": "https://newapp.myinvestor.es/app/products/investments/funds/613283/IE00B18GC888",
+      "amount": 498.77,
       "roi": 0.0,
       "note": "",
       "beneficiary": "",
@@ -162,7 +185,8 @@
       "bank_name": "BVNK EUR",
       "account_number": "GB82SAPY60838240856399",
       "bic_swift": "SAPYGB2L",
-      "payment_reference": "Deposit to account No. MC103520"
+      "payment_reference": "Deposit to account No. MC103520",
+      "isin": ""
     },
     {
       "name": "Renault Bank",
@@ -175,7 +199,8 @@
       "bank_name": "",
       "account_number": "",
       "bic_swift": "",
-      "payment_reference": ""
+      "payment_reference": "",
+      "isin": ""
     },
     {
       "name": "TWINO (Flexi)",
@@ -188,7 +213,8 @@
       "bank_name": "Citadele",
       "account_number": "LV27PARX0027107683333",
       "bic_swift": "PARXLV22",
-      "payment_reference": "Inversor Nº 171823 FLEXI"
+      "payment_reference": "Inversor Nº 171823 FLEXI",
+      "isin": ""
     },
     {
       "name": "Esketik",
@@ -201,7 +227,8 @@
       "bank_name": "Verified Payments UAB",
       "account_number": "LT783750020003743569",
       "bic_swift": "VEPALT2X",
-      "payment_reference": "INV-883742 JUAN RAFAEL SIMARRO FABA - Top-up user account"
+      "payment_reference": "INV-883742 JUAN RAFAEL SIMARRO FABA - Top-up user account",
+      "isin": ""
     }
   ]
 }
